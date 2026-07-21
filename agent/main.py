@@ -1,17 +1,17 @@
 """CLI entry point for Olist NL2SQL agent.
 
 Usage:
-    python -m agent "Top 10 sellers by revenue"
-    
+    python -m agent "<question>"
+
 Or with the installed script:
-    olist-nl2sql "Top 10 sellers by revenue"
+    olist-nl2sql "<question>"
 """
 import sys
 import json
 from tabulate import tabulate
 
-from .agent import run_agent
-from .config import settings
+from agent.graph import run_agent
+from core.config import settings
 
 
 def format_output(state: dict) -> str:

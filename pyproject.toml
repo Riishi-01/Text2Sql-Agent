@@ -23,12 +23,18 @@ dependencies = [
 package = true
 
 [tool.setuptools.packages.find]
-include = ["agent*"]
+include = ["agent*", "core*", "api*", "agents*"]
 
 [project.scripts]
 olist-nl2sql = "agent.main:main"
+text2sql-api  = "api.app:app"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_functions = ["test_*"]
+markers = [
+    "unit: pure unit tests, no DB or network required",
+    "integration: require a live PostgreSQL database",
+    "e2e: require a running FastAPI server",
+]
