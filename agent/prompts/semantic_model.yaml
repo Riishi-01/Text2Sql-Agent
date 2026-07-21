@@ -1,0 +1,201 @@
+# Semantic Model - Olist E-Commerce Dataset
+
+## Dataset Overview
+- **Domain**: Brazilian e-commerce marketplace (Olist)
+- **Time range**: 2016-2018
+- **Max date**: {{NOW}}
+- **Scale**: ~100K orders, ~99K customers, ~3K sellers
+
+## Tables
+
+### customers
+Customer information for orders.
+- `customer_id` (PK) - Unique identifier for each order customer
+- `customer_unique_id` - Unique identifier for each customer (same customer can have multiple orders)
+- `customer_zip_code_prefix` - First 5 digits of zip code
+- `customer_city` - Customer city name
+- `customer_state` - Brazilian state abbreviation (2 letters)
+
+**Business Notes**:
+- One customer_unique_id can have multiple customer_id values (multiple orders)
+- Use customer_unique_id to identify unique customers across orders
+
+### sellers
+Seller information.
+- `seller_id` (PK) - Unique seller identifier
+- `seller_zip_code_prefix` - First 5 digits of zip code
+- `seller_city` - Seller city name
+- `seller_state` - Brazilian state abbreviation
+
+### products
+Product catalog.
+- `product_id` (PK) - Unique product identifier
+- `product_category_name` - Category name in Portuguese
+- `product_name_lenght` - Number of characters in product name
+- `product_description_lenght` - Number of characters in description
+- `product_photos_qty` - Number of product photos
+- `product_weight_g` - Weight in grams
+- `product_length_cm`, `product_height_cm`, `product_width_cm` - Dimensions
+
+**Business Notes**:
+- Categories are in Portuguese; use product_category_translation for English names
+- Some products have NULL category names
+
+### product_category_translation
+English translations for product categories.
+- `product_category_name` (PK) - Portuguese category name
+- `product_category_name_english` - English category name
+
+**Business Notes**:
+- NOT all products have translations (use LEFT JOIN)
+- ~71 categories translated
+
+### orders
+Order headers.
+- `order_id` (PK) - Unique order identifier
+- `customer_id` (FK → customers) - Customer who placed the order
+- `order_status` - Order status: delivered, shipped, canceled, etc.
+- `order_purchase_timestamp` - When order was placed (main date for analysis)
+- `order_approved_at` - Payment approval time
+- `order_delivered_carrier_date` - When handed to carrier
+- `order_delivered_customer_date` - When delivered to customer
+- `order_estimated_delivery_date` - Estimated delivery date
+
+**Business Notes**:
+- order_purchase_timestamp is the primary date for revenue/time analysis
+- order_status values: delivered, shipped, invoiced, processing, canceled, unavailable
+
+### order_items
+Order line items (one row per item, not per order).
+- `order_id` (FK → orders) - Order identifier
+- `order_item_id` - Sequential item number within order
+- `product_id` (FK → products) - Product identifier
+- `seller_id` (FK → sellers) - Seller identifier
+- `shipping_limit_date` - Seller's shipping deadline
+- `price` - Item price (in Brazilian Reais)
+- `freight_value` - Shipping cost
+
+**Business Notes**:
+- One order can have multiple items (multiple rows)
+- price + freight_value = total cost for item
+- Primary key: (order_id, order_item_id)
+
+### order_payments
+Payment information (one row per payment method, multiple rows per order possible).
+- `order_id` (FK → orders) - Order identifier
+- `payment_sequential` - Payment sequence number (multiple payments per order)
+- `payment_type` - Payment method: credit_card, boleto, voucher, debit_card
+- `payment_installments` - Number of installments
+- `payment_value` - Payment amount
+
+**Business Notes**:
+- payment_value is the amount paid via this payment method
+- One order can have multiple payment methods (multiple rows)
+- Sum payment_value by order_id for total order value
+
+### order_reviews
+Customer reviews for orders.
+- `review_id` (PK) - Unique review identifier
+- `order_id` (FK → orders) - Order being reviewed
+- `review_score` - Rating 1-5 (1=worst, 5=best)
+- `review_comment_title` - Review title (often NULL)
+- `review_comment_message` - Review text (often NULL)
+- `review_creation_date` - When review was created
+- `review_answer_timestamp` - When review was answered
+
+**Business Notes**:
+- One order can have multiple reviews
+- review_score is the primary metric for satisfaction
+
+### geolocation_by_zip (MATERIALIZED VIEW)
+Aggregated geolocation data by zip code prefix.
+- `geolocation_zip_code_prefix` (PK) - Zip code prefix
+- `geolocation_lat` - Average latitude for zip code
+- `geolocation_lng` - Average longitude for zip code
+- `geolocation_city` - Most common city name
+- `geolocation_state` - State abbreviation
+
+**Business Notes**:
+- USE THIS instead of raw geolocation table
+- Raw geolocation has duplicate zip codes with different lat/lng values
+- This view has ONE row per zip code with averaged coordinates
+
+## Key Metrics
+
+### Revenue
+```sql
+SUM(oi.price) FROM order_items oi
+```
+
+### Order Count
+```sql
+COUNT(DISTINCT o.order_id) FROM orders o
+```
+
+### Customer Count
+```sql
+COUNT(DISTINCT c.customer_unique_id) FROM customers c
+```
+
+### Average Order Value (AOV)
+```sql
+AVG(order_total) FROM (
+  SELECT order_id, SUM(price + freight_value) as order_total
+  FROM order_items
+  GROUP BY order_id
+)
+```
+
+### Review Score
+```sql
+AVG(review_score) FROM order_reviews
+```
+
+## Common Dimensions
+- Time: order_purchase_timestamp (year, month, day of week, hour)
+- Geography: customer_state, seller_state, customer_city
+- Product: product_category_name_english
+- Seller: seller_id
+- Payment: payment_type
+
+## Soft Foreign Keys
+These are logical relationships not enforced by database constraints:
+- orders.customer_id → customers.customer_id
+- order_items.product_id → products.product_id
+- order_items.seller_id → sellers.seller_id
+- order_payments.order_id → orders.order_id
+- order_reviews.order_id → orders.order_id
+- products.product_category_name → product_category_translation.product_category_name
+
+## Synonyms
+
+### Business Terms
+- "revenue" → SUM(oi.price)
+- "sales" → COUNT of orders or SUM of price
+- "order value" → price + freight_value
+- "freight" → freight_value
+- "shipping" → freight_value
+- "delivery" → order_delivered_customer_date
+- "rating" → review_score
+- "customer location" → customer_state or customer_city
+- "seller location" → seller_state or seller_city
+
+### Category Examples
+- "electronics" → informatica_acessorios
+- "furniture" → moveis_decoracao
+- "health/beauty" → beleza_saude
+- "sports" → esporte_lazer
+
+## Sample Values
+
+### order_status
+delivered, shipped, canceled, invoiced, processing, unavailable, created, approved
+
+### payment_type
+credit_card, boleto, voucher, debit_card, not_defined
+
+### customer_state (examples)
+SP, RJ, MG, RS, PR, SC, BA, GO, PE, ES
+
+### review_score
+1, 2, 3, 4, 5
