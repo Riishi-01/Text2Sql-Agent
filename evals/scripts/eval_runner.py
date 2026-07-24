@@ -35,6 +35,7 @@ SCRIPTS_DIR = Path(__file__).resolve().parent
 EVALS_DIR = SCRIPTS_DIR.parent
 CASES_YAML_PATH = EVALS_DIR / "cases.yaml"
 RESULTS_DIR = EVALS_DIR / "results"
+SUMMARY_DIR = RESULTS_DIR / "summary"      # results/summary/{run_id}/
 CHECKPOINTS_DIR = RESULTS_DIR / "checkpoints"
 
 if str(SCRIPTS_DIR) not in sys.path:
@@ -437,6 +438,53 @@ def write_per_query_json(results: List[Dict[str, Any]], path: Path) -> None:
     path.write_text(json.dumps(results, indent=2, default=str), encoding="utf-8")
 
 
+_CASE_SPLIT_DIMS = ["table", "time_frame", "filters", "aggregation", "join"]
+
+
+def _case_split_doc(r: Dict[str, Any]) -> Dict[str, Any]:
+    """Return a concise per-case document for passes/ and failures/ files."""
+    return {
+        "query_id":     r["query_id"],
+        "question":     r.get("question", ""),
+        "difficulty":   r.get("difficulty", ""),
+        "status":       r.get("status", ""),
+        "em":           r["em"],
+        "ex":           r["ex"],
+        "latency_sec":  r.get("latency_sec", 0.0),
+        "cost_usd":     r.get("cost_usd", 0.0),
+        "input_tokens": r.get("input_tokens", 0),
+        "output_tokens":r.get("output_tokens", 0),
+        "error":        r.get("error", ""),
+        "gold_sql":     r.get("gold_sql", ""),
+        "predicted_sql":r.get("predicted_sql", ""),
+        "rubric":       {dim: r.get(dim, "NA") for dim in _CASE_SPLIT_DIMS},
+    }
+
+
+def write_case_splits(
+    results: List[Dict[str, Any]],
+    passes_dir: Path,
+    failures_dir: Path,
+) -> None:
+    """Write aggregate passes.json and failures.json into their directories.
+
+    - passes_dir/passes.json   — array of all cases with status == 'pass'
+    - failures_dir/failures.json — array of all cases with status != 'pass'
+    """
+    passes   = [_case_split_doc(r) for r in results if r.get("status") == "pass"]
+    failures = [_case_split_doc(r) for r in results if r.get("status") != "pass"]
+
+    passes_dir.mkdir(parents=True, exist_ok=True)
+    failures_dir.mkdir(parents=True, exist_ok=True)
+
+    (passes_dir   / "passes.json").write_text(
+        json.dumps(passes,   indent=2, default=str), encoding="utf-8"
+    )
+    (failures_dir / "failures.json").write_text(
+        json.dumps(failures, indent=2, default=str), encoding="utf-8"
+    )
+
+
 def build_summary(
     results: List[Dict[str, Any]], run_id: str, model: Optional[str]
 ) -> Dict[str, Any]:
@@ -623,26 +671,36 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     all_results = checkpoint_mgr.finalize()
 
-    # Write outputs.
-    RESULTS_DIR.mkdir(parents=True, exist_ok=True)
+    # ── Output directory layout ───────────────────────────────────────────
+    # New runs go to:  results/summary/{run_id}/{metrics,passes,failures}/
+    # Root-level eval_run.* copies kept for backward compatibility.
     if args.output:
-        csv_path = Path(args.output)
+        run_dir = Path(args.output)
     else:
-        csv_path = RESULTS_DIR / f"eval_run_{run_id}.csv"
+        run_dir = SUMMARY_DIR / run_id
 
-    per_query_path = RESULTS_DIR / f"eval_run_{run_id}.per_query.json"
-    summary_path = RESULTS_DIR / f"eval_run_{run_id}.summary.json"
-    latest_csv_path = RESULTS_DIR / "eval_run.csv"
+    metrics_dir  = run_dir / "metrics"
+    passes_dir   = run_dir / "passes"
+    failures_dir = run_dir / "failures"
+
+    for d in (metrics_dir, passes_dir, failures_dir, CHECKPOINTS_DIR, RESULTS_DIR):
+        d.mkdir(parents=True, exist_ok=True)
+
+    csv_path       = metrics_dir / "eval_run.csv"
+    per_query_path = metrics_dir / "per_query.json"
+    summary_path   = metrics_dir / "summary.json"
 
     write_csv(all_results, csv_path)
     write_per_query_json(all_results, per_query_path)
     summary = build_summary(all_results, run_id, args.model)
     summary_path.write_text(json.dumps(summary, indent=2, default=str), encoding="utf-8")
-    shutil.copyfile(csv_path, latest_csv_path)
 
-    # Markdown report (4th output file).
+    # Split results into passes/ and failures/ aggregate files.
+    write_case_splits(all_results, passes_dir, failures_dir)
+
+    # Markdown report → metrics/
     wall_time_sec = time.perf_counter() - _wall_start
-    report_path = RESULTS_DIR / f"eval_run_{run_id}.report.md"
+    report_path = metrics_dir / "report.md"
     report_generator.generate_report(
         summary,
         all_results,
@@ -650,7 +708,11 @@ def main(argv: Optional[List[str]] = None) -> int:
         wall_time_sec=wall_time_sec,
         parallel_workers=args.max_workers,
     )
-    shutil.copyfile(report_path, RESULTS_DIR / "eval_run.report.md")
+
+    # Root-level latest copies (backward compat — eval_run.* in results/).
+    shutil.copyfile(csv_path,     RESULTS_DIR / "eval_run.csv")
+    shutil.copyfile(report_path,  RESULTS_DIR / "eval_run.report.md")
+    shutil.copyfile(summary_path, RESULTS_DIR / "eval_run.summary.json")
 
     checkpoint_mgr.delete()
 
@@ -666,10 +728,12 @@ def main(argv: Optional[List[str]] = None) -> int:
         if stats["n"]:
             print(f"  {diff}: n={stats['n']} pass_rate={stats['pass_rate']:.2%}")
     print("=" * 60)
-    print(f"CSV:            {csv_path}")
-    print(f"Per-query JSON: {per_query_path}")
-    print(f"Summary JSON:   {summary_path}")
-    print(f"Report MD:      {report_path}")
+    print(f"Run dir:        {run_dir}")
+    print(f"  metrics/      {metrics_dir}")
+    print(f"  passes/       {passes_dir / 'passes.json'}")
+    print(f"  failures/     {failures_dir / 'failures.json'}")
+    print(f"  report.md     {report_path}")
+    print(f"Latest copies → {RESULTS_DIR / 'eval_run.*'}")
 
     return 0
 
