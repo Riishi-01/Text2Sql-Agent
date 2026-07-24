@@ -4,91 +4,89 @@
 **Question**: "What is the total revenue by customer state?"
 
 ```sql
-SELECT 
+SELECT
     c.customer_state,
-    SUM(oi.price) as total_revenue
+    ROUND(SUM(oi.price + oi.freight_value), 2) AS revenue
 FROM orders o
 JOIN customers c ON o.customer_id = c.customer_id
 JOIN order_items oi ON o.order_id = oi.order_id
-WHERE o.order_status = 'delivered'
 GROUP BY c.customer_state
-ORDER BY total_revenue DESC
+ORDER BY revenue DESC
 LIMIT 27;
 ```
+
+*Note: Revenue = price + freight_value. No order_status filter — the question
+asks for all orders, not just delivered ones. Only add order_status filter when
+the question explicitly mentions "delivered", "shipped", "canceled", etc.*
+
+---
 
 ## Example 2: Average Order Value by Category
 **Question**: "Show average order value by product category"
 
 ```sql
-SELECT 
-    COALESCE(pct.product_category_name_english, p.product_category_name) as category,
-    AVG(oi.price + oi.freight_value) as avg_order_value
+SELECT
+    COALESCE(pct.product_category_name_english, p.product_category_name) AS category,
+    ROUND(AVG(oi.price + oi.freight_value), 2) AS avg_order_value
 FROM order_items oi
 JOIN products p ON oi.product_id = p.product_id
-LEFT JOIN product_category_translation pct 
+LEFT JOIN product_category_translation pct
     ON p.product_category_name = pct.product_category_name
 GROUP BY COALESCE(pct.product_category_name_english, p.product_category_name)
 ORDER BY avg_order_value DESC
 LIMIT 20;
 ```
 
-## Example 3: Top Sellers by Revenue
+*Note: Always COALESCE to English name. LEFT JOIN so untranslated products still appear.*
+
+---
+
+## Example 3: Top N Sellers by Revenue
 **Question**: "Who are the top 10 sellers by total revenue?"
 
 ```sql
-SELECT 
+SELECT
     s.seller_id,
-    s.seller_city,
-    s.seller_state,
-    COUNT(DISTINCT oi.order_id) as order_count,
-    SUM(oi.price) as total_revenue
+    ROUND(SUM(oi.price + oi.freight_value), 2) AS revenue
 FROM sellers s
 JOIN order_items oi ON s.seller_id = oi.seller_id
-GROUP BY s.seller_id, s.seller_city, s.seller_state
-ORDER BY total_revenue DESC
+GROUP BY s.seller_id
+ORDER BY revenue DESC
 LIMIT 10;
 ```
+
+*Note: Include ONLY columns the question asks for. Revenue = price + freight_value.
+Do NOT add seller_city / seller_state / order_count unless the question requests them.*
+
+---
 
 ## Example 4: Distinct Customer Count
 **Question**: "How many unique customers placed orders in 2017?"
 
 ```sql
-SELECT 
-    COUNT(DISTINCT c.customer_unique_id) as unique_customers
+SELECT COUNT(DISTINCT c.customer_unique_id) AS unique_customers
 FROM orders o
 JOIN customers c ON o.customer_id = c.customer_id
 WHERE o.order_purchase_timestamp >= '2017-01-01'
   AND o.order_purchase_timestamp < '2018-01-01';
 ```
 
-## Example 5: Geolocation Join (Using geolocation_by_zip)
-**Question**: "What is the average order value by customer city coordinates?"
+*Note: customer_unique_id (not customer_id) for unique people across orders.*
 
-```sql
-SELECT 
-    gz.geolocation_city,
-    gz.geolocation_state,
-    gz.geolocation_lat,
-    gz.geolocation_lng,
-    AVG(oi.price + oi.freight_value) as avg_order_value
-FROM orders o
-JOIN customers c ON o.customer_id = c.customer_id
-JOIN geolocation_by_zip gz ON c.customer_zip_code_prefix = gz.geolocation_zip_code_prefix
-JOIN order_items oi ON o.order_id = oi.order_id
-GROUP BY gz.geolocation_city, gz.geolocation_state, gz.geolocation_lat, gz.geolocation_lng
-ORDER BY avg_order_value DESC
-LIMIT 50;
-```
+---
 
-## Example 6: Lead Conversion (Time to Delivery)
+## Example 5: Delivery Time by State (status filter IS required here)
 **Question**: "What is the average delivery time in days by state?"
 
 ```sql
-SELECT 
+-- The question asks specifically about delivery, so order_status='delivered' IS required.
+-- EXTRACT(DAY FROM date_a - date_b) gives integer day diff.
+-- Do NOT apply this filter to general revenue / ranking / count queries.
+SELECT
     c.customer_state,
-    AVG(
+    ROUND(AVG(
         EXTRACT(DAY FROM o.order_delivered_customer_date - o.order_purchase_timestamp)
-    ) as avg_delivery_days
+    ), 2) AS avg_delivery_days
 FROM orders o
 JOIN customers c ON o.customer_id = c.customer_id
 WHERE o.order_status = 'delivered'
@@ -98,18 +96,123 @@ ORDER BY avg_delivery_days DESC
 LIMIT 27;
 ```
 
-## Example 7: Deduplicated Reviews
+---
+
+## Example 6: Deduplicated Reviews (subquery, NOT CTE)
 **Question**: "What is the average review score, considering only the latest review per order?"
 
 ```sql
-WITH latest_reviews AS (
+SELECT AVG(review_score) AS avg_review_score
+FROM (
     SELECT DISTINCT ON (order_id)
         order_id,
         review_score
     FROM order_reviews
     ORDER BY order_id, review_creation_date DESC
-)
-SELECT 
-    AVG(review_score) as avg_review_score
-FROM latest_reviews;
+) AS latest_reviews;
 ```
+
+*Note: Subquery aliased with AS — NOT a CTE (WITH ... AS). The validator
+does not recognize CTE names as valid tables and will reject the query.*
+
+---
+
+## Example 7: Count Question — Scalar Output Shape
+**Question**: "How many orders were delivered late?"
+
+```sql
+SELECT COUNT(*) AS late_orders
+FROM orders
+WHERE order_status = 'delivered'
+  AND order_delivered_customer_date IS NOT NULL
+  AND order_estimated_delivery_date IS NOT NULL
+  AND order_delivered_customer_date > order_estimated_delivery_date;
+```
+
+*Note: "How many / count of / number of" → ONE row with COUNT(*).
+Do NOT return a list of orders with detail columns (order_id, dates, etc.).*
+
+---
+
+## Example 8: Per-State Average GMV — Grain Trap Avoided
+**Question**: "Avg order value (GMV) per state, top 5"
+
+```sql
+-- Pre-aggregate per order_id first, THEN average per state.
+-- Direct AVG(price + freight) averages line items — wrong grain.
+SELECT customer_state, ROUND(AVG(order_total), 2) AS avg_gmv
+FROM (
+    SELECT c.customer_state, o.order_id,
+           SUM(i.price + i.freight_value) AS order_total
+    FROM orders o
+    JOIN customers c ON o.customer_id = c.customer_id
+    JOIN order_items i ON o.order_id = i.order_id
+    GROUP BY c.customer_state, o.order_id
+) AS sub
+GROUP BY customer_state
+ORDER BY avg_gmv DESC
+LIMIT 5;
+```
+
+*Note: Subquery (FROM (...) AS sub), NOT a CTE. No order_status filter.*
+
+---
+
+## Example 9: Monthly Trend — TO_CHAR Bucketing
+**Question**: "Monthly order count (full trend across the dataset)"
+
+```sql
+SELECT TO_CHAR(order_purchase_timestamp, 'YYYY-MM') AS ym,
+       COUNT(*) AS order_count
+FROM orders
+GROUP BY ym
+ORDER BY ym;
+```
+
+*Note: TO_CHAR('YYYY-MM') gives one sortable column for month buckets.
+Do NOT split into EXTRACT(YEAR) + EXTRACT(MONTH) — that gives two columns, wrong shape.
+No LIMIT — "full trend" means all months.*
+
+---
+
+## Example 10: On-Time vs Late Comparison — Direct CASE in SELECT
+**Question**: "Compare avg review score: on-time vs late deliveries"
+
+```sql
+SELECT
+    CASE
+        WHEN o.order_delivered_customer_date <= o.order_estimated_delivery_date
+            THEN 'on_time'
+        ELSE 'late'
+    END AS delivery_status,
+    ROUND(AVG(r.review_score)::numeric, 3) AS avg_score,
+    COUNT(*) AS n
+FROM order_reviews r
+JOIN orders o ON r.order_id = o.order_id
+WHERE o.order_status = 'delivered'
+  AND o.order_delivered_customer_date IS NOT NULL
+  AND o.order_estimated_delivery_date IS NOT NULL
+GROUP BY delivery_status;
+```
+
+*Note: Put the CASE WHEN directly in SELECT + GROUP BY on the alias.
+Do NOT wrap orders in a subquery and join reviews to it — that loses review columns.*
+
+---
+
+## Example 11: Distribution Query — No LIMIT
+**Question**: "Order count distribution per customer (how many customers ordered N times?)"
+
+```sql
+SELECT n_orders, COUNT(*) AS n_customers
+FROM (
+    SELECT customer_unique_id, COUNT(DISTINCT customer_id) AS n_orders
+    FROM customers
+    GROUP BY customer_unique_id
+) AS sub
+GROUP BY n_orders
+ORDER BY n_orders;
+```
+
+*Note: Distribution = return ALL rows, no LIMIT.
+"Distribution of X" = one row per distinct X value.*

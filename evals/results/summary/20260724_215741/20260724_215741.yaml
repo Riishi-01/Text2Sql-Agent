@@ -1,0 +1,939 @@
+run_id: '20260724_215741'
+name: null
+mode: agent(gpt-4o-mini)
+timestamp: '2026-07-24T21:58:04'
+totals:
+  total: 39
+  passed: 26
+  review: 5
+  failed: 10
+  errors: 3
+  timeouts: 0
+  pass_rate: 0.6667
+  ex_rate: 0.6923
+  em_rate: 0.0
+  total_cost_usd: 0.034062
+passes:
+- query_id: e02_10_ten_cities_customers
+  question: List of top 10 ten cities with customers
+  difficulty: easy
+  status: pass
+  outcome: pass
+  em: 0
+  ex: 1
+  latency_sec: 3.263114
+  cost_usd: 0.0008559
+  input_tokens: 5538
+  output_tokens: 42
+  error: ''
+  gold_sql: 'SELECT customer_city, COUNT(DISTINCT customer_unique_id) AS n_customers
+
+    FROM customers
+
+    GROUP BY customer_city
+
+    ORDER BY n_customers DESC
+
+    LIMIT 10'
+  predicted_sql: 'SELECT c.customer_city, COUNT(DISTINCT c.customer_unique_id) AS customer_count
+
+    FROM customers c
+
+    GROUP BY c.customer_city
+
+    ORDER BY customer_count DESC
+
+    LIMIT 10;'
+  rubric:
+    table: correct
+    time_frame: NA
+    filters: NA
+    aggregation: correct
+    join: NA
+- query_id: e04_unique_customers
+  question: How many unique customers?
+  difficulty: easy
+  status: pass
+  outcome: pass
+  em: 0
+  ex: 1
+  latency_sec: 4.177346
+  cost_usd: 0.00084255
+  input_tokens: 5533
+  output_tokens: 21
+  error: ''
+  gold_sql: SELECT COUNT(DISTINCT customer_unique_id) FROM customers
+  predicted_sql: 'SELECT COUNT(DISTINCT customer_unique_id) AS unique_customers
+
+    FROM customers;'
+  rubric:
+    table: correct
+    time_frame: NA
+    filters: NA
+    aggregation: correct
+    join: NA
+- query_id: e05_average_review_score
+  question: Average review score
+  difficulty: easy
+  status: pass
+  outcome: pass
+  em: 0
+  ex: 1
+  latency_sec: 4.482915
+  cost_usd: 0.0008406
+  input_tokens: 5532
+  output_tokens: 18
+  error: ''
+  gold_sql: SELECT ROUND(AVG(review_score), 4) FROM order_reviews
+  predicted_sql: 'SELECT AVG(review_score) AS avg_review_score
+
+    FROM order_reviews;'
+  rubric:
+    table: correct
+    time_frame: NA
+    filters: NA
+    aggregation: correct
+    join: NA
+- query_id: e06_orders_delivered_late
+  question: Orders delivered late
+  difficulty: easy
+  status: pass
+  outcome: review
+  em: 0
+  ex: 1
+  latency_sec: 1.59055
+  cost_usd: 0.0008646
+  input_tokens: 5532
+  output_tokens: 58
+  error: ''
+  gold_sql: "SELECT COUNT(*)\nFROM orders\nWHERE order_status = 'delivered'\n  AND order_delivered_customer_date IS NOT NULL\n  AND order_estimated_delivery_date IS NOT NULL\n  AND order_delivered_customer_date > order_estimated_delivery_date"
+  predicted_sql: "SELECT COUNT(*) AS late_orders\nFROM orders\nWHERE order_status = 'delivered'\n  AND order_delivered_customer_date IS NOT NULL\n  AND order_estimated_delivery_date IS NOT NULL\n  AND order_delivered_customer_date > order_estimated_delivery_date;"
+  rubric:
+    table: correct
+    time_frame: NA
+    filters: flag
+    aggregation: correct
+    join: NA
+- query_id: e07_total_orders
+  question: How many total orders?
+  difficulty: easy
+  status: pass
+  outcome: pass
+  em: 0
+  ex: 1
+  latency_sec: 2.041617
+  cost_usd: 0.00084135
+  input_tokens: 5533
+  output_tokens: 19
+  error: ''
+  gold_sql: SELECT COUNT(*) AS n FROM orders
+  predicted_sql: 'SELECT COUNT(DISTINCT order_id) AS total_orders
+
+    FROM orders;'
+  rubric:
+    table: correct
+    time_frame: NA
+    filters: NA
+    aggregation: correct
+    join: NA
+- query_id: e08_unique_customers
+  question: How many unique customers?
+  difficulty: easy
+  status: pass
+  outcome: pass
+  em: 0
+  ex: 1
+  latency_sec: 2.751486
+  cost_usd: 0.00084255
+  input_tokens: 5533
+  output_tokens: 21
+  error: ''
+  gold_sql: SELECT COUNT(DISTINCT customer_unique_id) AS n FROM customers
+  predicted_sql: 'SELECT COUNT(DISTINCT customer_unique_id) AS unique_customers
+
+    FROM customers;'
+  rubric:
+    table: correct
+    time_frame: NA
+    filters: NA
+    aggregation: correct
+    join: NA
+- query_id: e09_distinct_product_categories
+  question: How many distinct product categories?
+  difficulty: easy
+  status: pass
+  outcome: pass
+  em: 0
+  ex: 1
+  latency_sec: 1.545363
+  cost_usd: 0.0008421
+  input_tokens: 5534
+  output_tokens: 20
+  error: ''
+  gold_sql: SELECT COUNT(DISTINCT product_category_name) AS n FROM products
+  predicted_sql: 'SELECT COUNT(DISTINCT product_category_name) AS distinct_categories
+
+    FROM products;'
+  rubric:
+    table: correct
+    time_frame: NA
+    filters: NA
+    aggregation: correct
+    join: NA
+- query_id: e10_total_sellers
+  question: How many total sellers?
+  difficulty: easy
+  status: pass
+  outcome: pass
+  em: 0
+  ex: 1
+  latency_sec: 0.913242
+  cost_usd: 0.00084135
+  input_tokens: 5533
+  output_tokens: 19
+  error: ''
+  gold_sql: SELECT COUNT(*) AS n FROM sellers
+  predicted_sql: 'SELECT COUNT(*) AS total_sellers
+
+    FROM sellers
+
+    LIMIT 100;'
+  rubric:
+    table: correct
+    time_frame: NA
+    filters: NA
+    aggregation: correct
+    join: NA
+- query_id: e11_total_payment_transactions
+  question: How many total payment transactions?
+  difficulty: easy
+  status: pass
+  outcome: pass
+  em: 0
+  ex: 1
+  latency_sec: 1.209503
+  cost_usd: 0.0008427
+  input_tokens: 5534
+  output_tokens: 21
+  error: ''
+  gold_sql: SELECT COUNT(*) AS n FROM order_payments
+  predicted_sql: 'SELECT COUNT(*) AS total_payment_transactions
+
+    FROM order_payments
+
+    LIMIT 100;'
+  rubric:
+    table: correct
+    time_frame: NA
+    filters: NA
+    aggregation: correct
+    join: NA
+- query_id: e12_total_reviews
+  question: How many total reviews?
+  difficulty: easy
+  status: pass
+  outcome: pass
+  em: 0
+  ex: 1
+  latency_sec: 1.722189
+  cost_usd: 0.00083895
+  input_tokens: 5533
+  output_tokens: 15
+  error: ''
+  gold_sql: SELECT COUNT(*) AS n FROM order_reviews
+  predicted_sql: 'SELECT COUNT(*) AS total_reviews
+
+    FROM order_reviews;'
+  rubric:
+    table: correct
+    time_frame: NA
+    filters: NA
+    aggregation: correct
+    join: NA
+- query_id: e14_5_states_by_number_sellers
+  question: Top 5 states by number of sellers
+  difficulty: easy
+  status: pass
+  outcome: pass
+  em: 0
+  ex: 1
+  latency_sec: 1.222873
+  cost_usd: 0.00085695
+  input_tokens: 5537
+  output_tokens: 44
+  error: ''
+  gold_sql: SELECT seller_state, COUNT(*) AS n FROM sellers GROUP BY seller_state ORDER BY n DESC LIMIT 5
+  predicted_sql: "SELECT\n    s.seller_state,\n    COUNT(*) AS number_of_sellers\nFROM sellers s\nGROUP BY s.seller_state\nORDER BY number_of_sellers DESC\nLIMIT 5;"
+  rubric:
+    table: correct
+    time_frame: NA
+    filters: NA
+    aggregation: correct
+    join: NA
+- query_id: e15_order_count_by_status_sorted
+  question: Order count by status (sorted by count desc)
+  difficulty: easy
+  status: pass
+  outcome: pass
+  em: 0
+  ex: 1
+  latency_sec: 2.368265
+  cost_usd: 0.0008523
+  input_tokens: 5538
+  output_tokens: 36
+  error: ''
+  gold_sql: SELECT order_status, COUNT(*) AS n FROM orders GROUP BY order_status ORDER BY n DESC
+  predicted_sql: 'SELECT o.order_status, COUNT(*) AS order_count
+
+    FROM orders o
+
+    GROUP BY o.order_status
+
+    ORDER BY order_count DESC
+
+    LIMIT 1000;'
+  rubric:
+    table: correct
+    time_frame: NA
+    filters: NA
+    aggregation: correct
+    join: NA
+- query_id: e16_total_line_items_across_all
+  question: Total line items across all orders
+  difficulty: easy
+  status: pass
+  outcome: pass
+  em: 0
+  ex: 1
+  latency_sec: 3.190138
+  cost_usd: 0.00084225
+  input_tokens: 5535
+  output_tokens: 20
+  error: ''
+  gold_sql: SELECT COUNT(*) AS n FROM order_items
+  predicted_sql: 'SELECT COUNT(*) AS total_line_items
+
+    FROM order_items
+
+    LIMIT 100;'
+  rubric:
+    table: correct
+    time_frame: NA
+    filters: NA
+    aggregation: correct
+    join: NA
+- query_id: h01_average_total_spend_unique_customer
+  question: Average total spend per unique customer (LTV proxy)
+  difficulty: hard
+  status: pass
+  outcome: pass
+  em: 0
+  ex: 1
+  latency_sec: 2.127233
+  cost_usd: 0.00088365
+  input_tokens: 5539
+  output_tokens: 88
+  error: ''
+  gold_sql: "SELECT ROUND(AVG(customer_total), 2) AS avg_ltv\nFROM (\n  SELECT c.customer_unique_id, SUM(i.price + i.freight_value) AS customer_total\n  FROM customers c\n  JOIN orders o ON c.customer_id = o.customer_id\n  JOIN order_items i ON o.order_id = i.order_id\n  GROUP BY c.customer_unique_id\n) AS sub"
+  predicted_sql: "SELECT ROUND(AVG(order_total), 2) AS avg_spend_per_customer\nFROM (\n    SELECT c.customer_unique_id, SUM(oi.price + oi.freight_value) AS order_total\n    FROM orders o\n    JOIN customers c ON o.customer_id = c.customer_id\n    JOIN order_items oi ON o.order_id = oi.order_id\n    GROUP BY c.customer_unique_id\n) AS sub;"
+  rubric:
+    table: correct
+    time_frame: NA
+    filters: NA
+    aggregation: correct
+    join: correct
+- query_id: h03_5_sellers_by_number_distinct
+  question: Top 5 sellers by number of distinct customer states served
+  difficulty: hard
+  status: pass
+  outcome: pass
+  em: 0
+  ex: 1
+  latency_sec: 1.811353
+  cost_usd: 0.0008832
+  input_tokens: 5540
+  output_tokens: 87
+  error: ''
+  gold_sql: 'SELECT T1.seller_id, COUNT(DISTINCT T3.customer_state) AS n_states
+
+    FROM sellers T1
+
+    JOIN order_items T2 ON T1.seller_id = T2.seller_id
+
+    JOIN orders T4 ON T2.order_id = T4.order_id
+
+    JOIN customers T3 ON T4.customer_id = T3.customer_id
+
+    GROUP BY T1.seller_id
+
+    ORDER BY n_states DESC, T1.seller_id
+
+    LIMIT 5'
+  predicted_sql: "SELECT\n    s.seller_id,\n    COUNT(DISTINCT c.customer_state) AS distinct_customer_states\nFROM sellers s\nJOIN order_items oi ON s.seller_id = oi.seller_id\nJOIN orders o ON oi.order_id = o.order_id\nJOIN customers c ON o.customer_id = c.customer_id\nGROUP BY s.seller_id\nORDER BY distinct_customer_states DESC\nLIMIT 5;"
+  rubric:
+    table: correct
+    time_frame: NA
+    filters: NA
+    aggregation: correct
+    join: correct
+- query_id: h06_compare_avg_review_score_time
+  question: 'Compare avg review score: on-time vs late deliveries'
+  difficulty: hard
+  status: pass
+  outcome: review
+  em: 0
+  ex: 1
+  latency_sec: 3.09913
+  cost_usd: 0.00090285
+  input_tokens: 5539
+  output_tokens: 120
+  error: ''
+  gold_sql: "SELECT\n  CASE WHEN order_delivered_customer_date <= order_estimated_delivery_date THEN 'on_time' ELSE 'late' END AS delivery_status,\n  ROUND(AVG(review_score), 3) AS avg_score,\n  COUNT(*) AS n\nFROM order_reviews r\nJOIN orders o ON r.order_id = o.order_id\nWHERE o.order_status = 'delivered'\n  AND o.order_delivered_customer_date IS NOT NULL\n  AND o.order_estimated_delivery_date IS NOT NULL\nGROUP BY delivery_status"
+  predicted_sql: "SELECT\n    CASE\n        WHEN o.order_delivered_customer_date <= o.order_estimated_delivery_date\n            THEN 'on_time'\n        ELSE 'late'\n    END AS delivery_status,\n    ROUND(AVG(r.review_score)::numeric, 3) AS avg_score,\n    COUNT(*) AS n\nFROM order_reviews r\nJOIN orders o ON r.order_id = o.order_id\nWHERE o.order_status = 'delivered'\n  AND o.order_delivered_customer_date IS NOT NULL\n  AND o.order_estimated_delivery_date IS NOT NULL\nGROUP BY delivery_status;"
+  rubric:
+    table: correct
+    time_frame: NA
+    filters: flag
+    aggregation: correct
+    join: correct
+- query_id: h08_5_state_category_pairs_by
+  question: Top 5 (state, category) pairs by total revenue
+  difficulty: hard
+  status: pass
+  outcome: pass
+  em: 0
+  ex: 1
+  latency_sec: 2.894023
+  cost_usd: 0.00090855
+  input_tokens: 5541
+  output_tokens: 129
+  error: ''
+  gold_sql: "SELECT T4.customer_state, T3.product_category_name_english AS category,\n       ROUND(SUM(i.price + i.freight_value), 2) AS revenue\nFROM order_items i\nJOIN orders o ON i.order_id = o.order_id\nJOIN customers T4 ON o.customer_id = T4.customer_id\nJOIN products p ON i.product_id = p.product_id\nLEFT JOIN product_category_translation T3 ON p.product_category_name = T3.product_category_name\nGROUP BY T4.customer_state, T3.product_category_name_english\nORDER BY revenue DESC\nLIMIT 5"
+  predicted_sql: "SELECT\n    c.customer_state,\n    COALESCE(pct.product_category_name_english, p.product_category_name) AS category,\n    ROUND(SUM(oi.price + oi.freight_value), 2) AS total_revenue\nFROM orders o\nJOIN customers c ON o.customer_id = c.customer_id\nJOIN order_items oi ON o.order_id = oi.order_id\nJOIN products p ON oi.product_id = p.product_id\nLEFT JOIN product_category_translation pct ON p.product_category_name = pct.product_category_name\nGROUP BY c.customer_state, category\nORDER BY total_revenue DESC\nLIMIT 5;"
+  rubric:
+    table: correct
+    time_frame: NA
+    filters: NA
+    aggregation: correct
+    join: correct
+- query_id: m02_time_delivery_rate
+  question: On-time delivery rate
+  difficulty: medium
+  status: pass
+  outcome: review
+  em: 0
+  ex: 1
+  latency_sec: 2.734783
+  cost_usd: 0.00088155
+  input_tokens: 5533
+  output_tokens: 86
+  error: ''
+  gold_sql: "SELECT ROUND(100.0 * SUM(CASE WHEN order_delivered_customer_date <= order_estimated_delivery_date THEN 1 ELSE 0 END) / COUNT(*), 2) AS pct_on_time\nFROM orders\nWHERE order_status = 'delivered'\n  AND order_delivered_customer_date IS NOT NULL\n  AND order_estimated_delivery_date IS NOT NULL"
+  predicted_sql: "SELECT \n    ROUND(COUNT(CASE WHEN o.order_delivered_customer_date <= o.order_estimated_delivery_date THEN 1 END) * 100.0 / COUNT(*), 2) AS on_time_delivery_rate\nFROM orders o\nWHERE o.order_status = 'delivered'\n  AND o.order_delivered_customer_date IS NOT NULL\n  AND o.order_estimated_delivery_date IS NOT NULL;"
+  rubric:
+    table: correct
+    time_frame: NA
+    filters: flag
+    aggregation: flag
+    join: NA
+- query_id: m03_avg_order_value_gmv_state
+  question: Avg order value (GMV) per state, top 5
+  difficulty: medium
+  status: pass
+  outcome: pass
+  em: 0
+  ex: 1
+  latency_sec: 2.019787
+  cost_usd: 0.0008979
+  input_tokens: 5542
+  output_tokens: 111
+  error: ''
+  gold_sql: "SELECT customer_state, ROUND(AVG(order_total), 2) AS avg_gmv\nFROM (\n  SELECT c.customer_state, o.order_id, SUM(i.price + i.freight_value) AS order_total\n  FROM orders o\n  JOIN customers c ON o.customer_id = c.customer_id\n  JOIN order_items i ON o.order_id = i.order_id\n  GROUP BY o.order_id, c.customer_state\n) AS sub\nGROUP BY customer_state\nORDER BY avg_gmv DESC\nLIMIT 5"
+  predicted_sql: "SELECT customer_state, ROUND(AVG(order_total), 2) AS avg_gmv\nFROM (\n    SELECT c.customer_state, o.order_id,\n           SUM(i.price + i.freight_value) AS order_total\n    FROM orders o\n    JOIN customers c ON o.customer_id = c.customer_id\n    JOIN order_items i ON o.order_id = i.order_id\n    GROUP BY c.customer_state, o.order_id\n) AS sub\nGROUP BY customer_state\nORDER BY avg_gmv DESC\nLIMIT 5;"
+  rubric:
+    table: correct
+    time_frame: NA
+    filters: NA
+    aggregation: correct
+    join: correct
+- query_id: m04_5_product_categories_by_total
+  question: Top 5 product categories by total revenue (price + freight)
+  difficulty: medium
+  status: pass
+  outcome: review
+  em: 0
+  ex: 1
+  latency_sec: 2.125422
+  cost_usd: 0.00089715
+  input_tokens: 5541
+  output_tokens: 110
+  error: ''
+  gold_sql: "SELECT T3.product_category_name_english AS category,\n       ROUND(SUM(T1.price + T1.freight_value), 2) AS revenue\nFROM order_items T1\nJOIN products T2 ON T1.product_id = T2.product_id\nLEFT JOIN product_category_translation T3 ON T2.product_category_name = T3.product_category_name\nGROUP BY T3.product_category_name_english\nORDER BY revenue DESC\nLIMIT 5"
+  predicted_sql: "SELECT\n    COALESCE(pct.product_category_name_english, p.product_category_name) AS category,\n    ROUND(SUM(oi.price + oi.freight_value), 2) AS total_revenue\nFROM order_items oi\nJOIN products p ON oi.product_id = p.product_id\nLEFT JOIN product_category_translation pct ON p.product_category_name = pct.product_category_name\nGROUP BY COALESCE(pct.product_category_name_english, p.product_category_name)\nORDER BY total_revenue DESC\nLIMIT 5;"
+  rubric:
+    table: correct
+    time_frame: NA
+    filters: NA
+    aggregation: correct
+    join: flag
+- query_id: m06_payment_method_distribution_share
+  question: Payment method distribution (with share %)
+  difficulty: medium
+  status: pass
+  outcome: pass
+  em: 0
+  ex: 1
+  latency_sec: 4.787291
+  cost_usd: 0.000864
+  input_tokens: 5536
+  output_tokens: 56
+  error: ''
+  gold_sql: "SELECT payment_type,\n       COUNT(*) AS n,\n       ROUND(100.0 * COUNT(*) / (SELECT COUNT(*) FROM order_payments), 2) AS pct\nFROM order_payments\nGROUP BY payment_type\nORDER BY n DESC"
+  predicted_sql: "SELECT \n    payment_type,\n    COUNT(*) AS count,\n    ROUND(COUNT(*) * 100.0 / SUM(COUNT(*)) OVER (), 2) AS share_percentage\nFROM order_payments\nGROUP BY payment_type\nORDER BY count DESC;"
+  rubric:
+    table: correct
+    time_frame: NA
+    filters: NA
+    aggregation: correct
+    join: NA
+- query_id: m07_10_cities_by_number_unique
+  question: Top 10 cities by number of unique customers
+  difficulty: medium
+  status: pass
+  outcome: pass
+  em: 0
+  ex: 1
+  latency_sec: 2.117839
+  cost_usd: 0.0008589
+  input_tokens: 5538
+  output_tokens: 47
+  error: ''
+  gold_sql: 'SELECT customer_city, COUNT(DISTINCT customer_unique_id) AS n_unique_customers
+
+    FROM customers
+
+    GROUP BY customer_city
+
+    ORDER BY n_unique_customers DESC
+
+    LIMIT 10'
+  predicted_sql: "SELECT\n    c.customer_city,\n    COUNT(DISTINCT c.customer_unique_id) AS unique_customers\nFROM customers c\nGROUP BY c.customer_city\nORDER BY unique_customers DESC\nLIMIT 10;"
+  rubric:
+    table: correct
+    time_frame: NA
+    filters: NA
+    aggregation: correct
+    join: NA
+- query_id: m08_monthly_order_count_full_trend
+  question: Monthly order count (full trend across the dataset)
+  difficulty: medium
+  status: pass
+  outcome: pass
+  em: 0
+  ex: 1
+  latency_sec: 1.235585
+  cost_usd: 0.0008523
+  input_tokens: 5538
+  output_tokens: 36
+  error: ''
+  gold_sql: 'SELECT TO_CHAR(order_purchase_timestamp, ''YYYY-MM'') AS ym, COUNT(*) AS n
+
+    FROM orders
+
+    GROUP BY ym
+
+    ORDER BY ym'
+  predicted_sql: "SELECT TO_CHAR(order_purchase_timestamp, 'YYYY-MM') AS ym,\n       COUNT(*) AS order_count\nFROM orders\nGROUP BY ym\nORDER BY ym;"
+  rubric:
+    table: correct
+    time_frame: correct
+    filters: NA
+    aggregation: correct
+    join: NA
+- query_id: m10_10_sellers_by_total_revenue
+  question: Top 10 sellers by total revenue (price + freight)
+  difficulty: medium
+  status: pass
+  outcome: pass
+  em: 0
+  ex: 1
+  latency_sec: 2.366034
+  cost_usd: 0.0008706
+  input_tokens: 5540
+  output_tokens: 66
+  error: ''
+  gold_sql: 'SELECT T1.seller_id, ROUND(SUM(T2.price + T2.freight_value), 2) AS revenue
+
+    FROM sellers T1
+
+    JOIN order_items T2 ON T1.seller_id = T2.seller_id
+
+    GROUP BY T1.seller_id
+
+    ORDER BY revenue DESC
+
+    LIMIT 10'
+  predicted_sql: "SELECT\n    s.seller_id,\n    ROUND(SUM(oi.price + oi.freight_value), 2) AS revenue\nFROM sellers s\nJOIN order_items oi ON s.seller_id = oi.seller_id\nGROUP BY s.seller_id\nORDER BY revenue DESC\nLIMIT 10;"
+  rubric:
+    table: correct
+    time_frame: NA
+    filters: NA
+    aggregation: correct
+    join: correct
+- query_id: m11_time_delivery_rate_overall_delivered
+  question: On-time delivery rate overall (% of delivered orders on or before estimated date)
+  difficulty: medium
+  status: pass
+  outcome: review
+  em: 0
+  ex: 1
+  latency_sec: 2.614203
+  cost_usd: 0.00088425
+  input_tokens: 5543
+  output_tokens: 88
+  error: ''
+  gold_sql: "SELECT ROUND(100.0 * SUM(CASE WHEN order_delivered_customer_date <= order_estimated_delivery_date THEN 1 ELSE 0 END) / COUNT(*), 2) AS pct_on_time\nFROM orders\nWHERE order_status = 'delivered'\n  AND order_delivered_customer_date IS NOT NULL\n  AND order_estimated_delivery_date IS NOT NULL"
+  predicted_sql: "SELECT \n    ROUND(100.0 * COUNT(*) FILTER (WHERE o.order_delivered_customer_date <= o.order_estimated_delivery_date) / NULLIF(COUNT(*), 0), 2) AS on_time_delivery_rate\nFROM orders o\nWHERE o.order_status = 'delivered'\n  AND o.order_delivered_customer_date IS NOT NULL\n  AND o.order_estimated_delivery_date IS NOT NULL;"
+  rubric:
+    table: correct
+    time_frame: NA
+    filters: flag
+    aggregation: flag
+    join: NA
+- query_id: m12_distribution_review_scores_1_5
+  question: Distribution of review scores (1-5)
+  difficulty: medium
+  status: pass
+  outcome: pass
+  em: 0
+  ex: 1
+  latency_sec: 1.751458
+  cost_usd: 0.00084675
+  input_tokens: 5537
+  output_tokens: 27
+  error: ''
+  gold_sql: 'SELECT review_score, COUNT(*) AS n
+
+    FROM order_reviews
+
+    GROUP BY review_score
+
+    ORDER BY review_score'
+  predicted_sql: 'SELECT review_score, COUNT(*) AS count
+
+    FROM order_reviews
+
+    GROUP BY review_score
+
+    ORDER BY review_score;'
+  rubric:
+    table: correct
+    time_frame: NA
+    filters: NA
+    aggregation: correct
+    join: NA
+failures:
+- query_id: e01_5_selling_products_health_beauty
+  question: top 5 selling products in health beauty, category
+  difficulty: easy
+  status: error
+  outcome: error
+  em: 0
+  ex: 0
+  latency_sec: 4.026691
+  cost_usd: 0.00089625
+  input_tokens: 5539
+  output_tokens: 109
+  error: "Query execution failed: column p.product_name does not exist\nLINE 3:     p.product_name,\n            ^"
+  gold_sql: 'SELECT i.product_id, COUNT(*) AS n_sold
+
+    FROM order_items i
+
+    JOIN products p ON i.product_id = p.product_id
+
+    LEFT JOIN product_category_translation t ON p.product_category_name = t.product_category_name
+
+    WHERE t.product_category_name_english = ''health_beauty''
+
+    GROUP BY i.product_id
+
+    ORDER BY n_sold DESC, i.product_id
+
+    LIMIT 5'
+  predicted_sql: "SELECT\n    p.product_id,\n    p.product_name,\n    SUM(oi.price + oi.freight_value) AS total_sales\nFROM order_items oi\nJOIN products p ON oi.product_id = p.product_id\nLEFT JOIN product_category_translation pct ON p.product_category_name = pct.product_category_name\nWHERE COALESCE(pct.product_category_name_english, p.product_category_name) = 'beleza_saude'\nGROUP BY p.product_id, p.product_name\nORDER BY total_sales DESC\nLIMIT 5;"
+  rubric:
+    table: correct
+    time_frame: NA
+    filters: wrong
+    aggregation: flag
+    join: flag
+- query_id: e03_most_used_payment_methods_computers
+  question: What is the most used payment methods for computers accessories
+  difficulty: easy
+  status: fail
+  outcome: fail
+  em: 0
+  ex: 0
+  latency_sec: 4.402068
+  cost_usd: 0.00087765
+  input_tokens: 5539
+  output_tokens: 78
+  error: ''
+  gold_sql: 'SELECT op.payment_type, COUNT(*) AS n
+
+    FROM order_payments op
+
+    JOIN orders o ON op.order_id = o.order_id
+
+    JOIN order_items i ON o.order_id = i.order_id
+
+    JOIN products p ON i.product_id = p.product_id
+
+    LEFT JOIN product_category_translation t ON p.product_category_name = t.product_category_name
+
+    WHERE t.product_category_name_english = ''computers_accessories''
+
+    GROUP BY op.payment_type
+
+    ORDER BY n DESC'
+  predicted_sql: "SELECT\n    op.payment_type,\n    COUNT(*) AS usage_count\nFROM order_items oi\nJOIN products p ON oi.product_id = p.product_id\nJOIN order_payments op ON oi.order_id = op.order_id\nWHERE p.product_category_name = 'informatica_acessorios'\nGROUP BY op.payment_type\nORDER BY usage_count DESC\nLIMIT 1;"
+  rubric:
+    table: flag
+    time_frame: NA
+    filters: wrong
+    aggregation: correct
+    join: flag
+- query_id: e13_5_states_by_number_customers
+  question: Top 5 states by number of customers (with most customers first)
+  difficulty: easy
+  status: fail
+  outcome: fail
+  em: 0
+  ex: 0
+  latency_sec: 1.992596
+  cost_usd: 0.0008565
+  input_tokens: 5542
+  output_tokens: 42
+  error: ''
+  gold_sql: SELECT customer_state, COUNT(*) AS n FROM customers GROUP BY customer_state ORDER BY n DESC LIMIT 5
+  predicted_sql: 'SELECT c.customer_state, COUNT(DISTINCT c.customer_unique_id) AS customer_count
+
+    FROM customers c
+
+    GROUP BY c.customer_state
+
+    ORDER BY customer_count DESC
+
+    LIMIT 5;'
+  rubric:
+    table: correct
+    time_frame: NA
+    filters: NA
+    aggregation: correct
+    join: NA
+- query_id: h02_overall_repeat_customer_rate_customers
+  question: Overall repeat customer rate (% of customers with > 1 order)
+  difficulty: hard
+  status: error
+  outcome: error
+  em: 0
+  ex: 0
+  latency_sec: 2.991864
+  cost_usd: 0.00088875
+  input_tokens: 5541
+  output_tokens: 96
+  error: "Query execution failed: column reference \"customer_id\" is ambiguous\nLINE 4:     SELECT customer_unique_id, COUNT(DISTINCT customer_id) A...\n                                                      ^"
+  gold_sql: "SELECT ROUND(100.0 * SUM(CASE WHEN n_orders > 1 THEN 1 ELSE 0 END) / COUNT(*), 2) AS repeat_pct\nFROM (\n  SELECT customer_unique_id, COUNT(DISTINCT customer_id) AS n_orders\n  FROM customers GROUP BY customer_unique_id\n) AS sub"
+  predicted_sql: "SELECT \n    ROUND(COUNT(DISTINCT customer_unique_id) FILTER (WHERE order_count > 1) * 100.0 / COUNT(DISTINCT customer_unique_id), 2) AS repeat_customer_rate\nFROM (\n    SELECT customer_unique_id, COUNT(DISTINCT customer_id) AS order_count\n    FROM customers c\n    JOIN orders o ON c.customer_id = o.customer_id\n    GROUP BY customer_unique_id\n) AS sub;"
+  rubric:
+    table: correct
+    time_frame: NA
+    filters: NA
+    aggregation: correct
+    join: NA
+- query_id: h04_5_categories_worst_late_delivery
+  question: Top 5 categories with worst late delivery rate (>=50 delivered orders)
+  difficulty: hard
+  status: fail
+  outcome: fail
+  em: 0
+  ex: 0
+  latency_sec: 3.117303
+  cost_usd: 0.00092265
+  input_tokens: 5543
+  output_tokens: 152
+  error: ''
+  gold_sql: "SELECT T3.product_category_name_english AS category,\n       COUNT(*) AS n_delivered,\n       ROUND(100.0 * SUM(CASE WHEN T1.order_delivered_customer_date > T1.order_estimated_delivery_date THEN 1 ELSE 0 END) / COUNT(*), 2) AS pct_late\nFROM orders T1\nJOIN order_items T4 ON T1.order_id = T4.order_id\nJOIN products T5 ON T4.product_id = T5.product_id\nLEFT JOIN product_category_translation T3 ON T5.product_category_name = T3.product_category_name\nWHERE T1.order_status = 'delivered'\n  AND T1.order_delivered_customer_date IS NOT NULL\n  AND T1.order_estimated_delivery_date IS NOT NULL\nGROUP BY T3.product_category_name_english\nHAVING COUNT(*) >= 50\nORDER BY pct_late DESC\nLIMIT 5"
+  predicted_sql: "SELECT\n    COALESCE(pct.product_category_name_english, p.product_category_name) AS category,\n    ROUND(COUNT(CASE WHEN o.order_delivered_customer_date > o.order_estimated_delivery_date THEN 1 END) * 100.0 / NULLIF(COUNT(*), 0), 2) AS late_delivery_rate\nFROM orders o\nJOIN order_items oi ON o.order_id = oi.order_id\nJOIN products p ON oi.product_id = p.product_id\nLEFT JOIN product_category_translation pct ON p.product_category_name = pct.product_category_name\nWHERE o.order_status = 'delivered'\nGROUP BY category\nHAVING COUNT(*) >= 50\nORDER BY late_delivery_rate DESC\nLIMIT 5;"
+  rubric:
+    table: correct
+    time_frame: NA
+    filters: flag
+    aggregation: flag
+    join: correct
+- query_id: h05_payment_method_share_5_revenue
+  question: Payment method share per top-5 revenue category (using window function)
+  difficulty: hard
+  status: fail
+  outcome: fail
+  em: 0
+  ex: 0
+  latency_sec: 2.470862
+  cost_usd: 0.0009267
+  input_tokens: 5542
+  output_tokens: 159
+  error: ''
+  gold_sql: "SELECT cat AS category, payment_type, ROUND(100.0 * n / SUM(n) OVER (PARTITION BY cat), 1) AS pct\nFROM (\n  SELECT T3.product_category_name_english AS cat, op.payment_type, COUNT(*) AS n\n  FROM order_payments op\n  JOIN orders o ON op.order_id = o.order_id\n  JOIN order_items i ON o.order_id = i.order_id\n  JOIN products p ON i.product_id = p.product_id\n  LEFT JOIN product_category_translation T3 ON p.product_category_name = T3.product_category_name\n  WHERE T3.product_category_name_english IN (\n    SELECT T3.product_category_name_english\n    FROM order_items i\n    JOIN products p ON i.product_id = p.product_id\n    LEFT JOIN product_category_translation T3 ON p.product_category_name = T3.product_category_name\n    GROUP BY T3.product_category_name_english\n    ORDER BY SUM(i.price + i.freight_value) DESC LIMIT 5\n  )\nGROUP BY T3.product_category_name_english, op.payment_type\n) AS sub\nORDER BY cat, pct DESC"
+  predicted_sql: "SELECT\n    pct.product_category_name_english AS category,\n    op.payment_type,\n    ROUND(SUM(op.payment_value), 2) AS total_payment,\n    ROUND(SUM(op.payment_value) * 100.0 / SUM(SUM(op.payment_value)) OVER (PARTITION BY pct.product_category_name_english), 2) AS payment_share\nFROM order_payments op\nJOIN orders o ON op.order_id = o.order_id\nJOIN order_items oi ON o.order_id = oi.order_id\nJOIN products p ON oi.product_id = p.product_id\nLEFT JOIN product_category_translation pct ON p.product_category_name = pct.product_category_name\nGROUP BY pct.product_category_name_english, op.payment_type\nORDER BY total_payment DESC\nLIMIT 5;"
+  rubric:
+    table: correct
+    time_frame: NA
+    filters: NA
+    aggregation: flag
+    join: correct
+- query_id: h07_multi_item_orders_items_from
+  question: '% of multi-item orders with items from 2+ categories'
+  difficulty: hard
+  status: error
+  outcome: error
+  em: 0
+  ex: 0
+  latency_sec: 2.580671
+  cost_usd: 0.00096555
+  input_tokens: 5541
+  output_tokens: 224
+  error: "Query execution failed: column \"total_orders.total_count\" must appear in the GROUP BY clause or be used in an aggregate function\nLINE 2: ...INCT multi_item_orders.order_id) * 100.0 / NULLIF(total_orde...\n                                                             ^"
+  gold_sql: "SELECT ROUND(100.0 * SUM(CASE WHEN n_categories >= 2 THEN 1 ELSE 0 END) / COUNT(*), 2) AS pct_multi_category\nFROM (\n  SELECT o.order_id, COUNT(DISTINCT T3.product_category_name_english) AS n_categories\n  FROM orders o\n  JOIN order_items i ON o.order_id = i.order_id\n  JOIN products p ON i.product_id = p.product_id\n  LEFT JOIN product_category_translation T3 ON p.product_category_name = T3.product_category_name\n  GROUP BY o.order_id\n  HAVING COUNT(*) >= 2\n) AS sub"
+  predicted_sql: "SELECT \n    ROUND(COUNT(DISTINCT multi_item_orders.order_id) * 100.0 / NULLIF(total_orders.total_count, 0), 2) AS percentage_multi_item_orders\nFROM (\n    SELECT o.order_id\n    FROM order_items oi\n    JOIN orders o ON oi.order_id = o.order_id\n    GROUP BY o.order_id\n    HAVING COUNT(DISTINCT oi.product_id) > 1\n) AS multi_item_orders\nCROSS JOIN (\n    SELECT COUNT(DISTINCT order_id) AS total_count\n    FROM orders\n) AS total_orders\nWHERE multi_item_orders.order_id IN (\n    SELECT o.order_id\n    FROM order_items oi\n    JOIN orders o ON oi.order_id = o.order_id\n    JOIN products p ON oi.product_id = p.product_id\n    LEFT JOIN product_category_translation pct ON p.product_category_name = pct.product_category_name\n    GROUP BY o.order_id\n    HAVING COUNT(DISTINCT COALESCE(pct.product_category_name_english, p.product_category_name)) > 1\n);"
+  rubric:
+    table: correct
+    time_frame: NA
+    filters: NA
+    aggregation: correct
+    join: correct
+- query_id: h09_monthly_avg_order_value_trend
+  question: Monthly avg order value trend (with subquery to pre-aggregate per-order)
+  difficulty: hard
+  status: fail
+  outcome: fail
+  em: 0
+  ex: 0
+  latency_sec: 3.179385
+  cost_usd: 0.0008982
+  input_tokens: 5544
+  output_tokens: 111
+  error: ''
+  gold_sql: "SELECT TO_CHAR(o.order_purchase_timestamp, 'YYYY-MM') AS ym,\n       ROUND(AVG(order_total), 2) AS avg_order_value,\n       COUNT(*) AS n_orders\nFROM (\n  SELECT o.order_id, o.order_purchase_timestamp, SUM(i.price + i.freight_value) AS order_total\n  FROM orders o JOIN order_items i ON o.order_id = i.order_id\n  GROUP BY o.order_id, o.order_purchase_timestamp\n) o\nGROUP BY ym\nORDER BY ym"
+  predicted_sql: "SELECT\n    TO_CHAR(order_date, 'YYYY-MM') AS ym,\n    ROUND(AVG(order_total), 2) AS avg_order_value\nFROM (\n    SELECT\n        o.order_purchase_timestamp AS order_date,\n        o.order_id,\n        SUM(oi.price + oi.freight_value) AS order_total\n    FROM orders o\n    JOIN order_items oi ON o.order_id = oi.order_id\n    GROUP BY o.order_id, o.order_purchase_timestamp\n) AS sub\nGROUP BY ym\nORDER BY ym;"
+  rubric:
+    table: correct
+    time_frame: correct
+    filters: NA
+    aggregation: correct
+    join: correct
+- query_id: h10_average_days_between_delivery_review
+  question: Average days between delivery and review creation
+  difficulty: hard
+  status: fail
+  outcome: fail
+  em: 0
+  ex: 0
+  latency_sec: 3.468497
+  cost_usd: 0.0008718
+  input_tokens: 5536
+  output_tokens: 69
+  error: ''
+  gold_sql: "SELECT ROUND(AVG(DATE_PART('day', r.review_creation_date - o.order_delivered_customer_date))::numeric, 2) AS avg_review_lag_days,\n       COUNT(*) AS n\nFROM order_reviews r\nJOIN orders o ON r.order_id = o.order_id\nWHERE o.order_status = 'delivered'\n  AND o.order_delivered_customer_date IS NOT NULL\n  AND r.review_creation_date IS NOT NULL"
+  predicted_sql: "SELECT AVG(EXTRACT(DAY FROM r.review_creation_date - o.order_delivered_customer_date)) AS avg_days_between_delivery_and_review\nFROM order_reviews r\nJOIN orders o ON r.order_id = o.order_id\nWHERE o.order_delivered_customer_date IS NOT NULL\n  AND r.review_creation_date IS NOT NULL;"
+  rubric:
+    table: correct
+    time_frame: wrong
+    filters: wrong
+    aggregation: correct
+    join: correct
+- query_id: m01_5_states_longest_delivery_time
+  question: Top 5 states with longest delivery time
+  difficulty: medium
+  status: fail
+  outcome: fail
+  em: 0
+  ex: 1
+  latency_sec: 1.760858
+  cost_usd: 0.00088695
+  input_tokens: 5537
+  output_tokens: 94
+  error: ''
+  gold_sql: "SELECT c.customer_state,\n       ROUND(AVG(DATE_PART('day', o.order_delivered_customer_date - o.order_purchase_timestamp))::numeric, 2) AS avg_days\nFROM orders o\nJOIN customers c ON o.customer_id = c.customer_id\nWHERE o.order_status = 'delivered'\n  AND o.order_delivered_customer_date IS NOT NULL\nGROUP BY c.customer_state\nORDER BY avg_days DESC\nLIMIT 5"
+  predicted_sql: "SELECT\n    c.customer_state,\n    ROUND(AVG(EXTRACT(DAY FROM o.order_delivered_customer_date - o.order_purchase_timestamp)), 2) AS avg_delivery_days\nFROM orders o\nJOIN customers c ON o.customer_id = c.customer_id\nWHERE o.order_status = 'delivered'\n  AND o.order_delivered_customer_date IS NOT NULL\nGROUP BY c.customer_state\nORDER BY avg_delivery_days DESC\nLIMIT 5;"
+  rubric:
+    table: correct
+    time_frame: wrong
+    filters: flag
+    aggregation: correct
+    join: correct
+- query_id: m05_bottom_5_categories_by_average
+  question: Bottom 5 categories by average review score (only categories with at least 100 reviews)
+  difficulty: medium
+  status: fail
+  outcome: fail
+  em: 0
+  ex: 0
+  latency_sec: 3.679418
+  cost_usd: 0.0009081
+  input_tokens: 5546
+  output_tokens: 127
+  error: ''
+  gold_sql: "SELECT T3.product_category_name_english AS category,\n       ROUND(AVG(T1.review_score), 2) AS avg_score,\n       COUNT(*) AS n_reviews\nFROM order_reviews T1\nJOIN orders T2 ON T1.order_id = T2.order_id\nJOIN order_items T4 ON T2.order_id = T4.order_id\nJOIN products T5 ON T4.product_id = T5.product_id\nLEFT JOIN product_category_translation T3 ON T5.product_category_name = T3.product_category_name\nGROUP BY T3.product_category_name_english\nHAVING COUNT(*) >= 100\nORDER BY avg_score ASC, T3.product_category_name_english\nLIMIT 5"
+  predicted_sql: "SELECT\n    COALESCE(pct.product_category_name_english, p.product_category_name) AS category,\n    ROUND(AVG(r.review_score), 2) AS avg_review_score\nFROM order_reviews r\nJOIN orders o ON r.order_id = o.order_id\nJOIN order_items oi ON o.order_id = oi.order_id\nJOIN products p ON oi.product_id = p.product_id\nLEFT JOIN product_category_translation pct ON p.product_category_name = pct.product_category_name\nGROUP BY category\nHAVING COUNT(r.review_id) >= 100\nORDER BY avg_review_score ASC\nLIMIT 5;"
+  rubric:
+    table: correct
+    time_frame: NA
+    filters: NA
+    aggregation: correct
+    join: correct
+- query_id: m09_avg_payment_value_payment_type
+  question: Avg payment value per payment type
+  difficulty: medium
+  status: fail
+  outcome: fail
+  em: 0
+  ex: 0
+  latency_sec: 2.581751
+  cost_usd: 0.00086085
+  input_tokens: 5535
+  output_tokens: 51
+  error: ''
+  gold_sql: 'SELECT payment_type, ROUND(AVG(payment_value), 2) AS avg_value, COUNT(*) AS n
+
+    FROM order_payments
+
+    GROUP BY payment_type
+
+    ORDER BY avg_value DESC'
+  predicted_sql: "SELECT\n    op.payment_type,\n    ROUND(AVG(op.payment_value), 2) AS avg_payment_value\nFROM order_payments op\nGROUP BY op.payment_type\nORDER BY avg_payment_value DESC\nLIMIT 1000;"
+  rubric:
+    table: correct
+    time_frame: NA
+    filters: NA
+    aggregation: flag
+    join: NA
+- query_id: m13_order_count_distribution_customer_customers
+  question: Order count distribution per customer (how many customers ordered N times?)
+  difficulty: medium
+  status: fail
+  outcome: fail
+  em: 0
+  ex: 0
+  latency_sec: 1.65398
+  cost_usd: 0.00086655
+  input_tokens: 5541
+  output_tokens: 59
+  error: ''
+  gold_sql: "SELECT n_orders, COUNT(*) AS n_customers\nFROM (\n  SELECT customer_unique_id, COUNT(DISTINCT customer_id) AS n_orders\n  FROM customers GROUP BY customer_unique_id\n) AS sub\nGROUP BY n_orders\nORDER BY n_orders\nLIMIT 5"
+  predicted_sql: "SELECT n_orders, COUNT(*) AS n_customers\nFROM (\n    SELECT customer_unique_id, COUNT(DISTINCT customer_id) AS n_orders\n    FROM customers\n    GROUP BY customer_unique_id\n) AS sub\nGROUP BY n_orders\nORDER BY n_orders;"
+  rubric:
+    table: correct
+    time_frame: NA
+    filters: NA
+    aggregation: correct
+    join: NA
