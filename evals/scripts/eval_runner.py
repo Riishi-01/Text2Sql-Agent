@@ -3,16 +3,26 @@
 
 Modes:
   gold mode (default)  — predicted_sql = case's own gold_sql
-  model mode (--model) — predicted_sql = OpenAI chat completion output
+  model mode (--model) — predicted_sql = OpenAI chat completion (bare prompt)
+  agent mode (--agent) — predicted_sql = run_agent(question) full LangGraph pipeline
+
+Pass/Fail Logic:
+  PASS   = EX == 1 AND no rubric dimension == "wrong"
+           (rubric "flag" on join → route to manual review, not auto-fail)
+  FAIL   = EX == 0
+           OR any rubric dimension == "wrong" despite EX == 1 (coincidental-match FP caught)
+  REVIEW = EX == 1 AND rubric has "flag" (not "wrong") → needs human look
+  EM     = logged for drift-tracking, never gates pass/fail
 
 Usage:
     python3 eval_runner.py
+    python3 eval_runner.py --agent --agent-model gpt-4o-mini
     python3 eval_runner.py --case e01_5_selling_products_health_beauty
     python3 eval_runner.py --difficulty hard
     python3 eval_runner.py --inject forgot_filter
     python3 eval_runner.py --model gpt-4o-mini
-    python3 eval_runner.py --max-workers 4
-    python3 eval_runner.py --output results/my_run.csv
+    python3 eval_runner.py --max-workers 5
+    python3 eval_runner.py --output results/my_run
     python3 eval_runner.py --resume
 """
 import argparse
@@ -26,6 +36,7 @@ import sys
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
+from decimal import Decimal
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -33,6 +44,7 @@ import yaml
 
 SCRIPTS_DIR = Path(__file__).resolve().parent
 EVALS_DIR = SCRIPTS_DIR.parent
+PROJECT_ROOT = EVALS_DIR.parent          # repo root — so `agent` package is importable
 CASES_YAML_PATH = EVALS_DIR / "cases.yaml"
 RESULTS_DIR = EVALS_DIR / "results"
 SUMMARY_DIR = RESULTS_DIR / "summary"      # results/summary/{run_id}/
@@ -40,6 +52,8 @@ CHECKPOINTS_DIR = RESULTS_DIR / "checkpoints"
 
 if str(SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPTS_DIR))
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
 import report_generator  # noqa: E402
 import rubric as rubric_mod  # noqa: E402
@@ -117,6 +131,72 @@ def discover_cases(case_filter: Optional[str] = None, difficulty_filter: Optiona
     return cases
 
 
+def slugify_run_name(name: str) -> str:
+    """Turn a human run title into a filesystem-safe slug.
+
+    "baseline 4o-mini!" → "baseline_4o_mini"
+    """
+    slug = re.sub(r"[^a-z0-9]+", "_", (name or "").lower()).strip("_")
+    return slug
+
+
+def build_run_id(name: Optional[str], timestamp: Optional[str] = None) -> str:
+    """Compose a run_id. Named runs get "{slug}_{timestamp}"; else timestamp only."""
+    ts = timestamp or datetime.now().strftime("%Y%m%d_%H%M%S")
+    if name:
+        slug = slugify_run_name(name)
+        if slug:
+            return f"{slug}_{ts}"
+    return ts
+
+
+def find_run_dir(run_name: str) -> Optional[Path]:
+    """Locate a prior run's summary directory by exact id or name prefix.
+
+    Accepts a full run_id (e.g. "baseline_20260724_191500") or a name slug
+    (e.g. "baseline") and returns the most recent matching directory.
+    """
+    if not SUMMARY_DIR.exists():
+        return None
+    exact = SUMMARY_DIR / run_name
+    if exact.is_dir():
+        return exact
+    slug = slugify_run_name(run_name)
+    matches = sorted(
+        (d for d in SUMMARY_DIR.iterdir()
+         if d.is_dir() and (d.name == run_name or d.name.startswith(slug + "_") or d.name.startswith(run_name))),
+        key=lambda d: d.stat().st_mtime,
+    )
+    return matches[-1] if matches else None
+
+
+def load_failed_ids_from_run(run_name: str) -> List[str]:
+    """Read the failing query_ids from a prior run.
+
+    Prefers the consolidated {run_id}.yaml; falls back to failures/failures.json.
+    """
+    run_dir = find_run_dir(run_name)
+    if run_dir is None:
+        raise FileNotFoundError(f"No prior run found matching: {run_name!r} under {SUMMARY_DIR}")
+
+    # 1) Consolidated YAML  ({run_id}.yaml)
+    yaml_path = run_dir / f"{run_dir.name}.yaml"
+    if yaml_path.exists():
+        data = yaml.safe_load(yaml_path.read_text(encoding="utf-8")) or {}
+        failures = data.get("failures") or []
+        ids = [f.get("query_id") for f in failures if f.get("query_id")]
+        if ids:
+            return ids
+
+    # 2) Fallback: failures/failures.json
+    failures_json = run_dir / "failures" / "failures.json"
+    if failures_json.exists():
+        arr = json.loads(failures_json.read_text(encoding="utf-8"))
+        return [f.get("query_id") for f in arr if f.get("query_id")]
+
+    return []
+
+
 def get_gold_sql(case: Dict[str, Any]) -> str:
     """Get gold SQL for a case.
     
@@ -181,38 +261,84 @@ def _row_to_jsonable(row: Any) -> Any:
         return {k: _row_to_jsonable(v) for k, v in row.items()}
     if isinstance(row, (list, tuple)):
         return [_row_to_jsonable(v) for v in row]
+    if isinstance(row, Decimal):
+        return float(row)
     return row
 
 
-def _rows_sort_key(rows: List[Any]) -> List[str]:
-    return sorted(json.dumps(_row_to_jsonable(r), sort_keys=True, default=str) for r in rows)
+def _is_number(x: Any) -> bool:
+    """True for int/float/Decimal (but not bool, which is an int subclass)."""
+    if isinstance(x, bool):
+        return False
+    return isinstance(x, (int, float, Decimal))
 
 
 def _values_equal(a: Any, b: Any, tol: float = FLOAT_TOLERANCE) -> bool:
-    if isinstance(a, (int, float)) and isinstance(b, (int, float)):
-        if a == b:
+    """Compare two scalar values with relative float tolerance.
+
+    Handles int/float/Decimal uniformly (PostgreSQL numeric columns come back
+    as Decimal, which the old isinstance(a,(int,float)) check silently skipped —
+    causing e.g. 4.0888 vs 4.0888019 to be treated as unequal).
+    """
+    if _is_number(a) and _is_number(b):
+        fa, fb = float(a), float(b)
+        if fa == fb:
             return True
-        denom = max(abs(a), abs(b), 1e-9)
-        return abs(a - b) / denom <= tol
+        denom = max(abs(fa), abs(fb), 1e-9)
+        return abs(fa - fb) / denom <= tol
     return a == b
+
+
+def _row_values(row: Any) -> List[Any]:
+    """Extract a positional list of values from a row.
+
+    Column NAMES are intentionally ignored — result equality depends on the
+    values, not what the SELECT list aliased them to. Gold and predicted SQL
+    routinely use different aliases (e.g. `COUNT(*) AS n` vs `... AS cnt`).
+    """
+    if isinstance(row, dict):
+        return list(row.values())
+    if isinstance(row, (list, tuple)):
+        return list(row)
+    return [row]
+
+
+def _row_sort_key(row: Any) -> tuple:
+    """Stable, value-based sort key for a row.
+
+    Uses ONLY the values (not column names) and normalizes numbers to a rounded
+    float so that near-equal values (within tolerance) sort together. Each value
+    becomes a (type_tag, value) pair so mixed types sort deterministically
+    without raising TypeError.
+    """
+    key = []
+    for v in _row_values(row):
+        if _is_number(v):
+            # Round to 6 decimals for a stable ordering that tolerates tiny
+            # float/Decimal representation differences.
+            key.append((0, round(float(v), 6)))
+        elif v is None:
+            key.append((1, ""))
+        else:
+            key.append((2, str(v)))
+    return tuple(key)
 
 
 def _rows_equal(rows_a: List[Any], rows_b: List[Any]) -> bool:
     if len(rows_a) != len(rows_b):
         return False
-    sorted_a = sorted(_row_to_jsonable(r) for r in rows_a) if not rows_a else None
-    # Sort both by JSON string representation for stable ordering.
-    json_a = [(json.dumps(_row_to_jsonable(r), sort_keys=True, default=str), r) for r in rows_a]
-    json_b = [(json.dumps(_row_to_jsonable(r), sort_keys=True, default=str), r) for r in rows_b]
-    json_a.sort(key=lambda t: t[0])
-    json_b.sort(key=lambda t: t[0])
 
-    for (_, ra), (_, rb) in zip(json_a, json_b):
-        row_a_vals = list(ra.values()) if isinstance(ra, dict) else list(ra)
-        row_b_vals = list(rb.values()) if isinstance(rb, dict) else list(rb)
-        if len(row_a_vals) != len(row_b_vals):
+    # Sort both by a VALUE-based key (column names ignored) so that result sets
+    # produced with different aliases still align row-for-row.
+    sorted_a = sorted(rows_a, key=_row_sort_key)
+    sorted_b = sorted(rows_b, key=_row_sort_key)
+
+    for ra, rb in zip(sorted_a, sorted_b):
+        vals_a = _row_values(ra)
+        vals_b = _row_values(rb)
+        if len(vals_a) != len(vals_b):
             return False
-        for va, vb in zip(row_a_vals, row_b_vals):
+        for va, vb in zip(vals_a, vals_b):
             if not _values_equal(va, vb):
                 return False
     return True
@@ -287,6 +413,25 @@ def call_model_with_retry(model: str, question: str, max_retries: int = MAX_RETR
             attempt += 1
 
 
+def call_agent(question: str) -> Tuple[dict, int, int, float]:
+    """Call run_agent() through the full LangGraph pipeline.
+
+    Returns (agent_state, input_tokens, output_tokens, latency_sec).
+    Token counts are extracted from the agent state (captured from LLM response).
+    """
+    from agent.graph import run_agent  # imported here to avoid module-level cost
+
+    start = time.perf_counter()
+    state = run_agent(question)
+    latency_sec = time.perf_counter() - start
+
+    # Extract token counts from agent state
+    input_tokens = state.get("input_tokens", 0) or 0
+    output_tokens = state.get("output_tokens", 0) or 0
+
+    return state, input_tokens, output_tokens, latency_sec
+
+
 # ── Per-case worker ───────────────────────────────────────────────────────
 
 
@@ -294,13 +439,20 @@ def run_single_case(
     case: Dict[str, Any],
     model: Optional[str],
     inject_failure: Optional[str],
+    use_agent: bool = False,
     statement_timeout_ms: int = DEFAULT_STATEMENT_TIMEOUT_MS,
 ) -> Dict[str, Any]:
-    """Execute one case end-to-end on a dedicated connection for this call.
+    """Execute one case end-to-end.
+
+    Modes:
+      - agent mode (use_agent=True): calls run_agent(question) via LangGraph,
+        reuses agent's executed rows for EX scoring, fetches gold rows separately.
+      - model mode (model != None): calls OpenAI directly with bare schema prompt.
+      - gold mode (default): runs gold_sql as-is (harness sanity check).
 
     Intended to be run inside a ThreadPoolExecutor worker. Opens exactly
-    one PostgreSQL connection for the whole case (gold + predicted query
-    execution), closed via `connection_scope`'s finally block.
+    one PostgreSQL connection for gold-row fetch and (in non-agent modes)
+    predicted-SQL execution.
     """
     query_id = case["id"]
     question = case.get("question", "")
@@ -317,6 +469,7 @@ def run_single_case(
         "output_tokens": 0,
         "cost_usd": 0.0,
         "status": "error",
+        "outcome": "fail",
         "table": "NA",
         "time_frame": "NA",
         "filters": "NA",
@@ -332,6 +485,75 @@ def run_single_case(
     attempt = 0
     while True:
         try:
+            # ── Agent mode ─────────────────────────────────────────────────
+            if use_agent:
+                agent_state, input_tokens, output_tokens, latency_sec = call_agent(question)
+
+                from core.config import settings as _cfg
+                cost_usd = compute_cost(_cfg.openai_model, input_tokens, output_tokens)
+
+                predicted_sql = (agent_state.get("sql") or "").strip()
+                agent_rows    = agent_state.get("rows")    # None if refused/errored
+                agent_error   = (agent_state.get("error") or "").strip()
+
+                result["predicted_sql"] = predicted_sql
+                result["latency_sec"]   = round(latency_sec, 6)
+                result["input_tokens"]  = input_tokens
+                result["output_tokens"] = output_tokens
+                result["cost_usd"]      = round(cost_usd, 8)
+
+                # Fetch gold rows for EX comparison (separate DB connection).
+                with connection_scope(statement_timeout_ms) as conn:
+                    gold_rows, _ = execute_query(conn, gold_sql)
+
+                result["ground_truth_rows"] = json.dumps(_row_to_jsonable(gold_rows), default=str)
+
+                # EM: SQL text comparison.
+                em, _ = compute_em(gold_sql, predicted_sql)
+
+                # EX: agent's rows vs gold rows.
+                # If refused / errored the agent returns rows=None → treat as []
+                predicted_rows = agent_rows if agent_rows is not None else []
+                ex = compute_ex(gold_rows, predicted_rows)
+
+                result["em"] = em
+                result["ex"] = ex
+
+                # Rubric on agent's SQL.
+                rubric_spec    = case.get("rubric", {})
+                rubric_results = rubric_mod.grade_rubric(predicted_sql, rubric_spec)
+                result["table"]       = rubric_results.get("table", "NA")
+                result["filters"]     = rubric_results.get("filters", "NA")
+                result["aggregation"] = rubric_results.get("aggregation", "NA")
+                result["join"]        = rubric_results.get("join", "NA")
+                time_dim    = rubric_results.get("time_frame", "NA")
+                date_op_dim = rubric_results.get("date_operator", "NA")
+                result["time_frame"]  = _combine_time_dims(time_dim, date_op_dim)
+
+                any_wrong = rubric_mod.has_any_wrong(rubric_results)
+                any_flag = rubric_mod.has_any_flag(rubric_results)
+
+                if agent_error and agent_rows is None:
+                    # Refused by validator OR runtime execution error.
+                    result["status"] = "error"
+                    result["outcome"] = "error"
+                    result["error"]  = agent_error
+                elif ex == 1 and not any_wrong:
+                    # PASS: EX=1 and no rubric dimension is "wrong".
+                    # If a dimension is only flagged (not wrong) → REVIEW (soft),
+                    # still counts as a pass but routed for a human look.
+                    result["status"] = "pass"
+                    result["outcome"] = "review" if any_flag else "pass"
+                    result["error"]  = ""
+                else:
+                    # FAIL: EX=0 OR any rubric dimension is "wrong".
+                    result["status"] = "fail"
+                    result["outcome"] = "fail"
+                    result["error"]  = agent_error or ""
+
+                return result
+
+            # ── Model / gold mode ──────────────────────────────────────────
             with connection_scope(statement_timeout_ms) as conn:
                 # 1. Get predicted SQL.
                 latency_sec = 0.0
@@ -382,12 +604,18 @@ def run_single_case(
                 result["time_frame"] = combined_time
 
                 any_wrong = rubric_mod.has_any_wrong(rubric_results)
+                any_flag = rubric_mod.has_any_flag(rubric_results)
 
-                # 5. Status.
-                if em == 1 and ex == 1 and not any_wrong:
+                # 5. Status (EM is logged but never gates pass/fail)
+                if ex == 1 and not any_wrong:
+                    # PASS: EX=1 and no rubric dimension is "wrong".
+                    # Flag-only (not wrong) → REVIEW (soft), still a pass.
                     result["status"] = "pass"
+                    result["outcome"] = "review" if any_flag else "pass"
                 else:
+                    # FAIL: EX=0 OR any rubric dimension is "wrong"
                     result["status"] = "fail"
+                    result["outcome"] = "fail"
                 result["error"] = ""
 
                 return result
@@ -448,6 +676,7 @@ def _case_split_doc(r: Dict[str, Any]) -> Dict[str, Any]:
         "question":     r.get("question", ""),
         "difficulty":   r.get("difficulty", ""),
         "status":       r.get("status", ""),
+        "outcome":      r.get("outcome", ""),
         "em":           r["em"],
         "ex":           r["ex"],
         "latency_sec":  r.get("latency_sec", 0.0),
@@ -485,6 +714,51 @@ def write_case_splits(
     )
 
 
+def write_run_yaml(
+    results: List[Dict[str, Any]],
+    summary: Dict[str, Any],
+    run_id: str,
+    name: Optional[str],
+    mode_label: str,
+    path: Path,
+) -> None:
+    """Write a single consolidated {run_id}.yaml holding passes AND failures.
+
+    This is the human-facing, run-titled artifact: totals up top, then the
+    passing cases (including any REVIEW cases) and the failing cases, each with
+    gold vs predicted SQL and per-dimension rubric verdicts.
+    """
+    passes   = [_case_split_doc(r) for r in results if r.get("status") == "pass"]
+    failures = [_case_split_doc(r) for r in results if r.get("status") != "pass"]
+
+    doc = {
+        "run_id":    run_id,
+        "name":      name,
+        "mode":      mode_label,
+        "timestamp": datetime.now().isoformat(timespec="seconds"),
+        "totals": {
+            "total":     summary.get("total", 0),
+            "passed":    summary.get("passed", 0),
+            "review":    summary.get("review", 0),
+            "failed":    summary.get("failed", 0),
+            "errors":    summary.get("errors", 0),
+            "timeouts":  summary.get("timeouts", 0),
+            "pass_rate": summary.get("pass_rate", 0.0),
+            "ex_rate":   summary.get("metrics", {}).get("ex_rate", 0.0),
+            "em_rate":   summary.get("metrics", {}).get("em_rate", 0.0),
+            "total_cost_usd": summary.get("metrics", {}).get("total_cost_usd", 0.0),
+        },
+        "passes":   passes,
+        "failures": failures,
+    }
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        yaml.safe_dump(doc, sort_keys=False, default_flow_style=False, allow_unicode=True, width=1000),
+        encoding="utf-8",
+    )
+
+
 def build_summary(
     results: List[Dict[str, Any]], run_id: str, model: Optional[str]
 ) -> Dict[str, Any]:
@@ -493,6 +767,8 @@ def build_summary(
     failed = sum(1 for r in results if r["status"] == "fail")
     errors = sum(1 for r in results if r["status"] == "error")
     timeouts = sum(1 for r in results if r["status"] == "timeout")
+    # REVIEW is a soft outcome layered on top of a pass (EX=1 with a rubric flag).
+    review = sum(1 for r in results if r.get("outcome") == "review")
 
     em_values = [r["em"] for r in results]
     ex_values = [r["ex"] for r in results]
@@ -551,6 +827,7 @@ def build_summary(
         "total": total,
         "passed": passed,
         "failed": failed,
+        "review": review,
         "errors": errors,
         "timeouts": timeouts,
         "pass_rate": round(passed / total, 4) if total else 0.0,
@@ -594,10 +871,19 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Text2SQL eval runner")
     parser.add_argument("--case", help="Run a single case by id (or id prefix)")
     parser.add_argument("--difficulty", choices=["easy", "medium", "hard"], help="Filter by difficulty")
-    parser.add_argument("--model", help="Model name for model mode (e.g. gpt-4o-mini). Omit for gold mode.")
-    parser.add_argument("--inject", help="Failure-injection mode passed to runner.py (gold mode only)")
+    parser.add_argument("--model", help="Model name for model mode (bare prompt, e.g. gpt-4o-mini).")
+    parser.add_argument("--agent", action="store_true",
+                        help="Agent mode: call run_agent() with the full LangGraph pipeline.")
+    parser.add_argument("--agent-model", dest="agent_model",
+                        help="Override settings.openai_model for agent mode (e.g. gpt-4o-mini).")
+    parser.add_argument("--inject", help="Failure-injection mode (gold mode only)")
+    parser.add_argument("--name", "--title", dest="name",
+                        help="Human title for this run; used in run_id and all artifact paths.")
+    parser.add_argument("--rerun-failures", dest="rerun_failures", metavar="RUN_NAME",
+                        help="Re-run only the failing cases from a prior run (by run_id/name); "
+                             "computes fresh metrics for that failing subset.")
     parser.add_argument("--max-workers", type=int, default=10, help="ThreadPoolExecutor worker count")
-    parser.add_argument("--output", help="Custom output CSV path")
+    parser.add_argument("--output", help="Custom run directory path (overrides summary/{run_id}/)")
     parser.add_argument("--resume", action="store_true", help="Resume from the latest checkpoint")
     parser.add_argument("--force", action="store_true", help="Ignore any existing checkpoint, start fresh")
     parser.add_argument("--list-checkpoints", action="store_true", help="List available checkpoints and exit")
@@ -620,7 +906,24 @@ def main(argv: Optional[List[str]] = None) -> int:
         print("No cases matched the given filters.")
         return 1
 
-    run_id = datetime.now().strftime("%Y%m%d_%H%M%S")
+    # --rerun-failures: restrict to the failing cases of a prior run.
+    if args.rerun_failures:
+        try:
+            failed_ids = load_failed_ids_from_run(args.rerun_failures)
+        except FileNotFoundError as e:
+            print(str(e))
+            return 1
+        if not failed_ids:
+            print(f"No failing cases found in prior run {args.rerun_failures!r} — nothing to re-run.")
+            return 0
+        id_set = set(failed_ids)
+        cases = [c for c in cases if c.get("id") in id_set]
+        if not cases:
+            print(f"Prior failures {sorted(id_set)} did not match any current cases.")
+            return 1
+        print(f"Re-running {len(cases)} failing case(s) from prior run {args.rerun_failures!r}")
+
+    run_id = build_run_id(args.name)
     checkpoint_mgr = CheckpointManager(CHECKPOINTS_DIR, run_id)
 
     if args.resume and not args.force:
@@ -634,14 +937,37 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     pending_cases = checkpoint_mgr.get_pending_cases(cases)
     _wall_start = time.perf_counter()
+
+    _agent_model_label = ""
+    if args.agent:
+        from agent.graph import get_graph
+        from agent.prompts import validate_prompts
+        from core.config import settings as _cfg
+
+        if args.agent_model:
+            _cfg.openai_model = args.agent_model
+            logger.info("Agent model overridden → %s", args.agent_model)
+
+        get_graph()          # compile LangGraph DAG once
+        validate_prompts()   # ensure all 4 prompt files exist
+        _agent_model_label = _cfg.openai_model
+        logger.info("Agent pre-warm complete (model=%s)", _cfg.openai_model)
+
+    if args.agent:
+        mode_label = f"agent({_agent_model_label})"
+    elif args.model:
+        mode_label = args.model
+    else:
+        mode_label = "gold"
+
     if not pending_cases:
         print("No pending queries, all completed.")
     else:
-        print(f"Running {len(pending_cases)} case(s) with max_workers={args.max_workers} (model={args.model or 'gold'})")
+        print(f"Running {len(pending_cases)} case(s) with max_workers={args.max_workers} (mode={mode_label})")
 
         with ThreadPoolExecutor(max_workers=args.max_workers) as executor:
             futures = {
-                executor.submit(run_single_case, case, args.model, args.inject): case
+                executor.submit(run_single_case, case, args.model, args.inject, args.agent): case
                 for case in pending_cases
             }
             for future in as_completed(futures):
@@ -692,11 +1018,15 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     write_csv(all_results, csv_path)
     write_per_query_json(all_results, per_query_path)
-    summary = build_summary(all_results, run_id, args.model)
+    summary = build_summary(all_results, run_id, mode_label)
     summary_path.write_text(json.dumps(summary, indent=2, default=str), encoding="utf-8")
 
     # Split results into passes/ and failures/ aggregate files.
     write_case_splits(all_results, passes_dir, failures_dir)
+
+    # Consolidated, run-titled YAML holding BOTH passes and failures.
+    run_yaml_path = run_dir / f"{run_id}.yaml"
+    write_run_yaml(all_results, summary, run_id, args.name, mode_label, run_yaml_path)
 
     # Markdown report → metrics/
     wall_time_sec = time.perf_counter() - _wall_start
@@ -710,9 +1040,10 @@ def main(argv: Optional[List[str]] = None) -> int:
     )
 
     # Root-level latest copies (backward compat — eval_run.* in results/).
-    shutil.copyfile(csv_path,     RESULTS_DIR / "eval_run.csv")
-    shutil.copyfile(report_path,  RESULTS_DIR / "eval_run.report.md")
-    shutil.copyfile(summary_path, RESULTS_DIR / "eval_run.summary.json")
+    shutil.copyfile(csv_path,       RESULTS_DIR / "eval_run.csv")
+    shutil.copyfile(per_query_path, RESULTS_DIR / "eval_run.per_query.json")
+    shutil.copyfile(report_path,    RESULTS_DIR / "eval_run.report.md")
+    shutil.copyfile(summary_path,   RESULTS_DIR / "eval_run.summary.json")
 
     checkpoint_mgr.delete()
 
@@ -720,8 +1051,8 @@ def main(argv: Optional[List[str]] = None) -> int:
     print()
     print("=" * 60)
     print(f"Run {run_id} ({summary['model']})")
-    print(f"Total: {summary['total']}  Passed: {summary['passed']}  Failed: {summary['failed']}  "
-          f"Errors: {summary['errors']}  Timeouts: {summary['timeouts']}")
+    print(f"Total: {summary['total']}  Passed: {summary['passed']}  Review: {summary.get('review', 0)}  "
+          f"Failed: {summary['failed']}  Errors: {summary['errors']}  Timeouts: {summary['timeouts']}")
     print(f"Pass rate: {summary['pass_rate']:.2%}  EM: {summary['metrics']['em_rate']:.2%}  "
           f"EX: {summary['metrics']['ex_rate']:.2%}")
     for diff, stats in summary["by_difficulty"].items():
@@ -729,6 +1060,7 @@ def main(argv: Optional[List[str]] = None) -> int:
             print(f"  {diff}: n={stats['n']} pass_rate={stats['pass_rate']:.2%}")
     print("=" * 60)
     print(f"Run dir:        {run_dir}")
+    print(f"  results yaml  {run_yaml_path}")
     print(f"  metrics/      {metrics_dir}")
     print(f"  passes/       {passes_dir / 'passes.json'}")
     print(f"  failures/     {failures_dir / 'failures.json'}")

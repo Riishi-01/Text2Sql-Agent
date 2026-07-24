@@ -5,14 +5,14 @@ JOIN products p ON i.product_id = p.product_id
 LEFT JOIN category_translation t ON p.product_category_name = t.product_category_name
 WHERE t.product_category_name_english = 'health_beauty'
 GROUP BY i.product_id
-ORDER BY n_sold DESC
-LIMIT 5",1,1,1,"[[""154e7e31ebfa092203795c972e5804a6"",281],[""2b4609f8948be18874494203496bc318"",260],[""7c1bd920dbdf22470b68bde975dd3ccf"",231],[""bb50f2e236e5eea0100680137654686c"",195],[""6cdd53843498f92890544667809f1595"",156]]","order_items.product_id, products.product_id, category_translation.product_category_name_english",,category_translation.product_category_name_english = 'health_beauty',"COUNT, GROUP BY product_id, ORDER BY COUNT DESC, LIMIT 5",order_items JOIN products (order_items.product_id = products.product_id); LEFT JOIN category_translation (products.product_category_name = category_translation.product_category_name)
+ORDER BY n_sold DESC, i.product_id
+LIMIT 5",1,1,1,"{""columns"":[""product_id"",""n_sold""],""rows"":[[""154e7e31ebfa092203795c972e5804a6"",281],[""2b4609f8948be18874494203496bc318"",260],[""7c1bd920dbdf22470b68bde975dd3ccf"",231],[""bb50f2e236e5eea0100680137654686c"",195],[""19c91ef95d509ea33eda93495c4d3481"",156]]}","order_items.product_id, products.product_id, category_translation.product_category_name_english",,category_translation.product_category_name_english = 'health_beauty',"COUNT, GROUP BY product_id, ORDER BY COUNT DESC, LIMIT 5",order_items JOIN products (order_items.product_id = products.product_id); LEFT JOIN category_translation (products.product_category_name = category_translation.product_category_name)
 2,"List of top 10 ten cities with customers
 ",Easy,ranking+grain_trap,,"SELECT customer_city, COUNT(DISTINCT customer_unique_id) AS n_customers
 FROM customers
 GROUP BY customer_city
 ORDER BY n_customers DESC
-LIMIT 10",1,1,1,"[[""sao paulo"",14984],[""rio de janeiro"",6620],[""belo horizonte"",2672],[""brasilia"",2069],[""curitiba"",1465],[""campinas"",1398],[""porto alegre"",1326],[""salvador"",1209],[""guarulhos"",1153],[""sao bernardo do campo"",908]]","customers.customer_city, customers.customer_unique_id",,,"COUNT DISTINCT, GROUP BY customer_city, ORDER BY count DESC, LIMIT 10",
+LIMIT 10",1,1,1,"{""columns"":[""customer_city"",""n_customers""],""rows"":[[""sao paulo"",14984],[""rio de janeiro"",6620],[""belo horizonte"",2672],[""brasilia"",2069],[""curitiba"",1465],[""campinas"",1398],[""porto alegre"",1326],[""salvador"",1209],[""guarulhos"",1153],[""sao bernardo do campo"",908]]}","customers.customer_city, customers.customer_unique_id",,,"COUNT DISTINCT, GROUP BY customer_city, ORDER BY count DESC, LIMIT 10",
 3,What is the most used payment methods for computers accessories,Easy,filter+aggregate,,"SELECT op.payment_type, COUNT(*) AS n
 FROM order_payments op
 JOIN orders o ON op.order_id = o.order_id
@@ -21,15 +21,15 @@ JOIN products p ON i.product_id = p.product_id
 LEFT JOIN category_translation t ON p.product_category_name = t.product_category_name
 WHERE t.product_category_name_english = 'computers_accessories'
 GROUP BY op.payment_type
-ORDER BY n DESC",1,1,1,"[[""credit_card"",5436],[""boleto"",2158],[""voucher"",340],[""debit_card"",148]]","order_payments.payment_type, products.product_category_name, category_translation.product_category_name_english",,category_translation.product_category_name_english = 'computers_accessories',"COUNT, GROUP BY payment_type, ORDER BY count DESC",order_payments JOIN orders; orders JOIN order_items; order_items JOIN products; products LEFT JOIN category_translation
-4,How many unique customers?,Easy,volume+grain_trap,,SELECT COUNT(DISTINCT customer_unique_id) FROM customers,1,1,1,[[96096]],customers.customer_unique_id,,,COUNT DISTINCT,
-5,Average review score,Easy,quality_avg,,"SELECT ROUND(AVG(review_score), 4) FROM order_reviews",1,1,1,[[4.0709]],order_reviews.review_score,,,AVG,
+ORDER BY n DESC",1,1,1,"{""columns"":[""payment_type"",""n""],""rows"":[[""credit_card"",5436],[""boleto"",2158],[""voucher"",340],[""debit_card"",148]]}","order_payments.payment_type, products.product_category_name, category_translation.product_category_name_english",,category_translation.product_category_name_english = 'computers_accessories',"COUNT, GROUP BY payment_type, ORDER BY count DESC",order_payments JOIN orders; orders JOIN order_items; order_items JOIN products; products LEFT JOIN category_translation
+4,How many unique customers?,Easy,volume+grain_trap,,SELECT COUNT(DISTINCT customer_unique_id) FROM customers,1,1,1,"{""columns"":[""count""],""rows"":[[96096]]}",customers.customer_unique_id,,,COUNT DISTINCT,
+5,Average review score,Easy,quality_avg,,"SELECT ROUND(AVG(review_score), 4) FROM order_reviews",1,1,1,"{""columns"":[""round""],""rows"":[[4.0709]]}",order_reviews.review_score,,,AVG,
 6,Orders delivered late,Easy,filter+count,,"SELECT COUNT(*)
 FROM orders
 WHERE order_status = 'delivered'
   AND order_delivered_customer_date IS NOT NULL
   AND order_estimated_delivery_date IS NOT NULL
-  AND order_delivered_customer_date > order_estimated_delivery_date",1,1,1,[[7826]],"orders.order_status, orders.order_delivered_customer_date, orders.order_estimated_delivery_date",date comparison operator: > (delivered > estimated → late),order_status = 'delivered'; order_delivered_customer_date IS NOT NULL; order_estimated_delivery_date IS NOT NULL; order_delivered_customer_date > order_estimated_delivery_date,COUNT,
+  AND order_delivered_customer_date > order_estimated_delivery_date",1,1,1,"{""columns"":[""count""],""rows"":[[7826]]}","orders.order_status, orders.order_delivered_customer_date, orders.order_estimated_delivery_date",date comparison operator: > (delivered > estimated → late),order_status = 'delivered'; order_delivered_customer_date IS NOT NULL; order_estimated_delivery_date IS NOT NULL; order_delivered_customer_date > order_estimated_delivery_date,COUNT,
 7,Top 5 states with longest delivery time,Medium,time+rank,,"SELECT c.customer_state,
        ROUND(AVG(JULIANDAY(o.order_delivered_customer_date) - JULIANDAY(o.order_purchase_timestamp)), 2) AS avg_days
 FROM orders o
@@ -38,12 +38,12 @@ WHERE o.order_status = 'delivered'
   AND o.order_delivered_customer_date IS NOT NULL
 GROUP BY c.customer_state
 ORDER BY avg_days DESC
-LIMIT 5",1,1,1,"[[""RR"",29.39],[""AP"",27.19],[""AM"",26.43],[""AL"",24.54],[""PA"",23.77]]","customers.customer_state, orders.order_delivered_customer_date, orders.order_purchase_timestamp","JULIANDAY(date) - JULIANDAY(date) — must use date diff, not raw subtraction",order_status = 'delivered'; order_delivered_customer_date IS NOT NULL,"AVG, GROUP BY customer_state, ORDER BY avg DESC, LIMIT 5",orders JOIN customers (orders.customer_id = customers.customer_id)
+LIMIT 5",1,1,1,"{""columns"":[""customer_state"",""avg_days""],""rows"":[[""RR"",29.39],[""AP"",27.19],[""AM"",26.43],[""AL"",24.54],[""PA"",23.77]]}","customers.customer_state, orders.order_delivered_customer_date, orders.order_purchase_timestamp","JULIANDAY(date) - JULIANDAY(date) — must use date diff, not raw subtraction",order_status = 'delivered'; order_delivered_customer_date IS NOT NULL,"AVG, GROUP BY customer_state, ORDER BY avg DESC, LIMIT 5",orders JOIN customers (orders.customer_id = customers.customer_id)
 8,On-time delivery rate,Medium,operational_kpi,,"SELECT ROUND(100.0 * SUM(CASE WHEN order_delivered_customer_date <= order_estimated_delivery_date THEN 1 ELSE 0 END) / COUNT(*), 2) AS pct_on_time
 FROM orders
 WHERE order_status = 'delivered'
   AND order_delivered_customer_date IS NOT NULL
-  AND order_estimated_delivery_date IS NOT NULL",1,1,1,[[91.89]],"orders.order_status, orders.order_delivered_customer_date, orders.order_estimated_delivery_date",date comparison operator: <= (delivered <= estimated → on time),order_status = 'delivered'; order_delivered_customer_date IS NOT NULL; order_estimated_delivery_date IS NOT NULL; date op <= (not <),"SUM(CASE), COUNT, ROUND(100.0 * ...)",
+  AND order_estimated_delivery_date IS NOT NULL",1,1,1,"{""columns"":[""pct_on_time""],""rows"":[[91.89]]}","orders.order_status, orders.order_delivered_customer_date, orders.order_estimated_delivery_date",date comparison operator: <= (delivered <= estimated → on time),order_status = 'delivered'; order_delivered_customer_date IS NOT NULL; order_estimated_delivery_date IS NOT NULL; date op <= (not <),"SUM(CASE), COUNT, ROUND(100.0 * ...)",
 9,"Avg order value (GMV) per state, top 5",Medium,grain_trap+ranking,,"SELECT customer_state, ROUND(AVG(order_total), 2) AS avg_gmv
 FROM (
   SELECT c.customer_state, o.order_id, SUM(i.price + i.freight_value) AS order_total
@@ -54,7 +54,7 @@ FROM (
 )
 GROUP BY customer_state
 ORDER BY avg_gmv DESC
-LIMIT 5",1,1,1,"[[""PB"",265.01],[""AC"",242.84],[""AP"",239.16],[""AL"",234.13],[""RO"",233.03]]","customers.customer_state, order_items.price, order_items.freight_value",,,"AVG, SUM, GROUP BY (subquery pre-aggregates per order to avoid grain trap), LIMIT 5",orders JOIN customers; orders JOIN order_items
+LIMIT 5",1,1,1,"{""columns"":[""customer_state"",""avg_gmv""],""rows"":[[""PB"",265.01],[""AC"",242.84],[""AP"",239.16],[""AL"",234.13],[""RO"",233.03]]}","customers.customer_state, order_items.price, order_items.freight_value",,,"AVG, SUM, GROUP BY (subquery pre-aggregates per order to avoid grain trap), LIMIT 5",orders JOIN customers; orders JOIN order_items
 10,How many total orders?,Easy,D1_volume,How many total orders?,SELECT COUNT(*) AS n FROM orders,1,1,1,"{""columns"":[""n""],""rows"":[[99441]]}",orders,,,COUNT,
 11,How many unique customers?,Easy,D1_volume,How many unique customers?,SELECT COUNT(DISTINCT customer_unique_id) AS n FROM customers,1,1,1,"{""columns"":[""n""],""rows"":[[96096]]}",customers.customer_unique_id,,,COUNT; DISTINCT required,
 12,How many distinct product categories?,Easy,D1_volume,How many distinct product categories?,SELECT COUNT(DISTINCT product_category_name) AS n FROM products,1,1,1,"{""columns"":[""n""],""rows"":[[73]]}",products.product_category_name,,,COUNT; DISTINCT required,
@@ -84,8 +84,8 @@ JOIN order_items T2 ON T1.seller_id = T2.seller_id
 JOIN orders T4 ON T2.order_id = T4.order_id
 JOIN customers T3 ON T4.customer_id = T3.customer_id
 GROUP BY T1.seller_id
-ORDER BY n_states DESC
-LIMIT 5",1,1,1,"{""columns"":[""seller_id"",""n_states""],""rows"":[[""955fee9216a65b617aa5c0531780ce60"",27],[""8b321bb669392f5163d04c59e235e066"",27],[""4869f7a5dfa277a7dca6462dcf3b52b2"",27],[""2138ccb85b11a4ec1e37afbd1c8eda1f"",27],[""1025f0e2d44d7041d6cf58b6550e0bfa"",27]]}","sellers.seller_id, customers.customer_state",,,COUNT,INNER JOIN order_items ON sellers.seller_id = order_items.seller_id; INNER JOIN orders ON order_items.order_id = orders.order_id; INNER JOIN customers ON orders.customer_id = customers.customer_id
+ORDER BY n_states DESC, T1.seller_id
+LIMIT 5",1,1,1,"{""columns"":[""seller_id"",""n_states""],""rows"":[[""1025f0e2d44d7041d6cf58b6550e0bfa"",27],[""2138ccb85b11a4ec1e37afbd1c8eda1f"",27],[""4869f7a5dfa277a7dca6462dcf3b52b2"",27],[""8b321bb669392f5163d04c59e235e066"",27],[""955fee9216a65b617aa5c0531780ce60"",27]]}","sellers.seller_id, customers.customer_state",,,COUNT,INNER JOIN order_items ON sellers.seller_id = order_items.seller_id; INNER JOIN orders ON order_items.order_id = orders.order_id; INNER JOIN customers ON orders.customer_id = customers.customer_id
 23,Top 5 categories with worst late delivery rate (>=50 delivered orders),Hard,D9_operational_kpi,Top 5 categories with worst late delivery rate (>=50 delivered orders),"SELECT T3.product_category_name_english AS category,
        COUNT(*) AS n_delivered,
        ROUND(100.0 * SUM(CASE WHEN T1.order_delivered_customer_date > T1.order_estimated_delivery_date THEN 1 ELSE 0 END) / COUNT(*), 2) AS pct_late
@@ -99,7 +99,7 @@ WHERE T1.order_status = 'delivered'
 GROUP BY T3.product_category_name_english
 HAVING COUNT(*) >= 50
 ORDER BY pct_late DESC
-LIMIT 5",1,1,1,"{""columns"":[""category"",""n_delivered"",""pct_late""],""rows"":[[""audio"",362,12.71],[""fashion_underwear_beach"",127,12.6],[""christmas_supplies"",150,12.0],[""books_technical"",263,11.03],[""home_confort"",429,10.26]]}","orders.order_status, orders.order_delivered_customer_date, orders.order_estimated_delivery_date, products.product_category_name, category_translation.product_category_name_english",date comparison operator: > (date_op from v3 case.yaml DateOperator spec),order_status = 'delivered'; order_delivered_customer_date IS NOT NULL; order_estimated_delivery_date IS NOT NULL,"SUM,COUNT",INNER JOIN order_items ON orders.order_id = order_items.order_id; INNER JOIN products ON order_items.product_id = products.product_id; LEFT JOIN category_translation ON products.product_category_name = category_translation.product_category_name
+LIMIT 5",1,1,1,"{""columns"":[""category"",""n_delivered"",""pct_late""],""rows"":[[""audio"",362,12.71],[""fashion_underwear_beach"",127,12.6],[""christmas_supplies"",150,12],[""books_technical"",263,11.03],[""home_confort"",429,10.26]]}","orders.order_status, orders.order_delivered_customer_date, orders.order_estimated_delivery_date, products.product_category_name, category_translation.product_category_name_english",date comparison operator: > (date_op from v3 case.yaml DateOperator spec),order_status = 'delivered'; order_delivered_customer_date IS NOT NULL; order_estimated_delivery_date IS NOT NULL,"SUM,COUNT",INNER JOIN order_items ON orders.order_id = order_items.order_id; INNER JOIN products ON order_items.product_id = products.product_id; LEFT JOIN category_translation ON products.product_category_name = category_translation.product_category_name
 24,Payment method share per top-5 revenue category (using window function),Hard,D5_distribution,Payment method share per top-5 revenue category (using window function),"SELECT cat AS category, payment_type, ROUND(100.0 * n / SUM(n) OVER (PARTITION BY cat), 1) AS pct
 FROM (
   SELECT T3.product_category_name_english AS cat, op.payment_type, COUNT(*) AS n
@@ -118,7 +118,7 @@ FROM (
   )
   GROUP BY T3.product_category_name_english, op.payment_type
 )
-ORDER BY cat, pct DESC",1,1,1,"{""columns"":[""category"",""payment_type"",""pct""],""rows"":[[""bed_bath_table"",""credit_card"",75.8],[""bed_bath_table"",""boleto"",15.9],[""bed_bath_table"",""voucher"",7.2],[""bed_bath_table"",""debit_card"",1.2],[""computers_accessories"",""credit_card"",67.3],[""computers_accessories"",""boleto"",26.7],[""computers_accessories"",""voucher"",4.2],[""computers_accessories"",""debit_card"",1.8],[""health_beauty"",""credit_card"",75.9],[""health_beauty"",""boleto"",18.7],[""health_beauty"",""voucher"",3.9],[""health_beauty"",""debit_card"",1.6],[""sports_leisure"",""credit_card"",74.2],[""sports_leisure"",""boleto"",19.8],[""sports_leisure"",""voucher"",4.6],[""sports_leisure"",""debit_card"",1.4],[""watches_gifts"",""credit_card"",78.3],[""watches_gifts"",""boleto"",16.5],[""watches_gifts"",""voucher"",4.1],[""watches_gifts"",""debit_card"",1.0]]}","order_payments.payment_type, products.product_category_name, category_translation.product_category_name_english",,,"COUNT,SUM",INNER JOIN orders ON order_payments.order_id = orders.order_id; INNER JOIN order_items ON orders.order_id = order_items.order_id; INNER JOIN products ON order_items.product_id = products.product_id; LEFT JOIN category_translation ON products.product_category_name = category_translation.product_category_name
+ORDER BY cat, pct DESC",1,1,1,"{""columns"":[""category"",""payment_type"",""pct""],""rows"":[[""bed_bath_table"",""credit_card"",75.8],[""bed_bath_table"",""boleto"",15.9],[""bed_bath_table"",""voucher"",7.2],[""bed_bath_table"",""debit_card"",1.2],[""computers_accessories"",""credit_card"",67.3],[""computers_accessories"",""boleto"",26.7],[""computers_accessories"",""voucher"",4.2],[""computers_accessories"",""debit_card"",1.8],[""health_beauty"",""credit_card"",75.9],[""health_beauty"",""boleto"",18.7],[""health_beauty"",""voucher"",3.9],[""health_beauty"",""debit_card"",1.6],[""sports_leisure"",""credit_card"",74.2],[""sports_leisure"",""boleto"",19.8],[""sports_leisure"",""voucher"",4.6],[""sports_leisure"",""debit_card"",1.4],[""watches_gifts"",""credit_card"",78.3],[""watches_gifts"",""boleto"",16.5],[""watches_gifts"",""voucher"",4.1],[""watches_gifts"",""debit_card"",1]]}","order_payments.payment_type, products.product_category_name, category_translation.product_category_name_english",,,"COUNT,SUM",INNER JOIN orders ON order_payments.order_id = orders.order_id; INNER JOIN order_items ON orders.order_id = order_items.order_id; INNER JOIN products ON order_items.product_id = products.product_id; LEFT JOIN category_translation ON products.product_category_name = category_translation.product_category_name
 25,Compare avg review score: on-time vs late deliveries,Hard,D4_comparison,Compare avg review score: on-time vs late deliveries,"SELECT
   CASE WHEN order_delivered_customer_date <= order_estimated_delivery_date THEN 'on_time' ELSE 'late' END AS delivery_status,
   ROUND(AVG(review_score), 3) AS avg_score,
@@ -184,14 +184,14 @@ JOIN products T5 ON T4.product_id = T5.product_id
 LEFT JOIN category_translation T3 ON T5.product_category_name = T3.product_category_name
 GROUP BY T3.product_category_name_english
 HAVING COUNT(*) >= 100
-ORDER BY avg_score ASC
+ORDER BY avg_score ASC, T3.product_category_name_english
 LIMIT 5",1,1,1,"{""columns"":[""category"",""avg_score"",""n_reviews""],""rows"":[[""office_furniture"",3.48,1701],[""fashion_male_clothing"",3.62,132],[""fixed_telephony"",3.67,265],[null,3.81,1636],[""audio"",3.81,365]]}","order_reviews.review_score, products.product_category_name, category_translation.product_category_name_english",,,"AVG,COUNT",INNER JOIN orders ON order_reviews.order_id = orders.order_id; INNER JOIN order_items ON orders.order_id = order_items.order_id; INNER JOIN products ON order_items.product_id = products.product_id; LEFT JOIN category_translation ON products.product_category_name = category_translation.product_category_name
 32,Payment method distribution (with share %),Medium,D5_distribution,Payment method distribution (with share %),"SELECT payment_type,
        COUNT(*) AS n,
        ROUND(100.0 * COUNT(*) / (SELECT COUNT(*) FROM order_payments), 2) AS pct
 FROM order_payments
 GROUP BY payment_type
-ORDER BY n DESC",1,1,1,"{""columns"":[""payment_type"",""n"",""pct""],""rows"":[[""credit_card"",76795,73.92],[""boleto"",19784,19.04],[""voucher"",5775,5.56],[""debit_card"",1529,1.47],[""not_defined"",3,0.0]]}",order_payments.payment_type,,,COUNT,
+ORDER BY n DESC",1,1,1,"{""columns"":[""payment_type"",""n"",""pct""],""rows"":[[""credit_card"",76795,73.92],[""boleto"",19784,19.04],[""voucher"",5775,5.56],[""debit_card"",1529,1.47],[""not_defined"",3,0]]}",order_payments.payment_type,,,COUNT,
 33,Top 10 cities by number of unique customers,Medium,D2_ranking,Top 10 cities by number of unique customers,"SELECT customer_city, COUNT(DISTINCT customer_unique_id) AS n_unique_customers
 FROM customers
 GROUP BY customer_city
@@ -204,7 +204,7 @@ ORDER BY ym",1,1,1,"{""columns"":[""ym"",""n""],""rows"":[[""2016-09"",4],[""201
 35,Avg payment value per payment type,Medium,D6_quality,Avg payment value per payment type,"SELECT payment_type, ROUND(AVG(payment_value), 2) AS avg_value, COUNT(*) AS n
 FROM order_payments
 GROUP BY payment_type
-ORDER BY avg_value DESC",1,1,1,"{""columns"":[""payment_type"",""avg_value"",""n""],""rows"":[[""credit_card"",163.32,76795],[""boleto"",145.03,19784],[""debit_card"",142.57,1529],[""voucher"",65.7,5775],[""not_defined"",0.0,3]]}","order_payments.payment_type, order_payments.payment_value",,,"AVG,COUNT",
+ORDER BY avg_value DESC",1,1,1,"{""columns"":[""payment_type"",""avg_value"",""n""],""rows"":[[""credit_card"",163.32,76795],[""boleto"",145.03,19784],[""debit_card"",142.57,1529],[""voucher"",65.7,5775],[""not_defined"",0,3]]}","order_payments.payment_type, order_payments.payment_value",,,"AVG,COUNT",
 36,Top 10 sellers by total revenue (price + freight),Medium,D2_ranking,Top 10 sellers by total revenue (price + freight),"SELECT T1.seller_id, ROUND(SUM(T2.price + T2.freight_value), 2) AS revenue
 FROM sellers T1
 JOIN order_items T2 ON T1.seller_id = T2.seller_id

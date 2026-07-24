@@ -86,6 +86,7 @@ def _section_topline(summary: Dict[str, Any]) -> str:
     total = summary.get("total", 0)
     passed = summary.get("passed", 0)
     failed = summary.get("failed", 0)
+    review = summary.get("review", 0)
     errors = summary.get("errors", 0)
     timeouts = summary.get("timeouts", 0)
 
@@ -104,8 +105,9 @@ def _section_topline(summary: Dict[str, Any]) -> str:
         f"*(cases with no wrong rubric dimension)*",
         f"- **False positive rate:** {fp_rate:.2%}  "
         f"*(EX pass but rubric wrong — {fp_count} of {total})*",
-        f"- **Pass / Fail / Error / Timeout:** "
-        f"{passed} / {failed} / {errors} / {timeouts}",
+        f"- **Review:** {review}  *(EX pass with a rubric flag — needs a human look)*",
+        f"- **Pass / Review / Fail / Error / Timeout:** "
+        f"{passed} / {review} / {failed} / {errors} / {timeouts}",
         "",
     ]
     return "\n".join(lines)

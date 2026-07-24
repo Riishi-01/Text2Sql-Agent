@@ -90,14 +90,27 @@ def load_table_metadata() -> Dict[str, TableInfo]:
     return tables
 
 
+# Cache for dataset max date (thread-safe: computed once, read many times)
+_dataset_max_date_cache: str = None
+
+
 def get_dataset_max_date() -> str:
     """Get the maximum date from the orders table for {{NOW}} resolution.
+
+    The result is cached after the first call to avoid repeated DB queries
+    during parallel eval runs.
 
     Returns:
         ISO date string (YYYY-MM-DD)
     """
+    global _dataset_max_date_cache
+
+    if _dataset_max_date_cache is not None:
+        return _dataset_max_date_cache
+
     if settings.now_override:
-        return settings.now_override
+        _dataset_max_date_cache = settings.now_override
+        return _dataset_max_date_cache
 
     conn_str = settings.database_url
 
@@ -106,12 +119,14 @@ def get_dataset_max_date() -> str:
             cur.execute("SELECT MAX(order_purchase_timestamp)::date FROM orders")
             result = cur.fetchone()
             if result and result[0]:
-                return str(result[0])
+                _dataset_max_date_cache = str(result[0])
+                return _dataset_max_date_cache
 
     # Fallback to current date
     from datetime import date
 
-    return date.today().isoformat()
+    _dataset_max_date_cache = date.today().isoformat()
+    return _dataset_max_date_cache
 
 
 def get_table_names() -> List[str]:

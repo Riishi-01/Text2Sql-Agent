@@ -33,6 +33,8 @@ class AgentState(TypedDict):
     - columns: present if execute_sql ran
     - rows: query results
     - error: error message if failed
+    - input_tokens: token count from LLM call
+    - output_tokens: token count from LLM call
     """
 
     question: str
@@ -41,6 +43,8 @@ class AgentState(TypedDict):
     columns: Optional[List[str]]
     rows: Optional[List[Dict[str, Any]]]
     error: Optional[str]
+    input_tokens: Optional[int]
+    output_tokens: Optional[int]
 
 
 def generate_sql(state: AgentState) -> AgentState:
@@ -77,10 +81,19 @@ def generate_sql(state: AgentState) -> AgentState:
         raw_sql = response.content
         sql = extract_sql(raw_sql)
 
+        # Extract token usage from response metadata
+        input_tokens = 0
+        output_tokens = 0
+        if hasattr(response, 'usage_metadata') and response.usage_metadata:
+            input_tokens = response.usage_metadata.get('input_tokens', 0)
+            output_tokens = response.usage_metadata.get('output_tokens', 0)
+
         return {
             **state,
             "sql": sql,
             "error": None,
+            "input_tokens": input_tokens,
+            "output_tokens": output_tokens,
         }
 
     except Exception as e:
@@ -88,6 +101,8 @@ def generate_sql(state: AgentState) -> AgentState:
             **state,
             "sql": None,
             "error": f"Failed to generate SQL: {str(e)}",
+            "input_tokens": 0,
+            "output_tokens": 0,
         }
 
 
@@ -170,10 +185,18 @@ def refuse(state: AgentState) -> AgentState:
     Returns:
         Updated state with error message describing validation failures
     """
-    validation = state.get("validation", {})
-    errors = validation.get("errors", [])
+    # `validation` may be None when generation itself failed (e.g. the LLM
+    # call errored or was rate-limited), so guard against None rather than
+    # relying on the dict default (the key exists with a None value).
+    validation = state.get("validation") or {}
+    errors = validation.get("errors") or []
 
-    error_msg = "SQL validation failed:\n" + "\n".join(f"  - {e}" for e in errors)
+    if errors:
+        error_msg = "SQL validation failed:\n" + "\n".join(f"  - {e}" for e in errors)
+    else:
+        # No validation errors → the failure happened upstream (generation).
+        upstream = state.get("error") or "SQL generation failed (no SQL produced)"
+        error_msg = upstream
 
     return {
         **state,
@@ -267,6 +290,8 @@ def run_agent(question: str) -> AgentState:
         "columns": None,
         "rows": None,
         "error": None,
+        "input_tokens": 0,
+        "output_tokens": 0,
     }
 
     result = graph.invoke(initial_state)
