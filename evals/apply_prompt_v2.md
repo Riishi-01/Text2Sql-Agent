@@ -12,15 +12,17 @@
 
 ---
 
-## Expected After Apply
+## Achieved Outcome
 
-| Metric | Before (Run 3) | After (Run 4) |
-|--------|---------------|---------------|
-| Pass rate | 53.8% (21/39) | **66.7% (26/39)** |
-| Easy | 75.0% (12/16) | 81.3% (13/16) |
-| Medium | 38.5% (5/13) | 69.2% (9/13) |
-| Hard | 0% (0/10) | **40.0% (4/10)** |
-| Total cost (gpt-4o-mini) | $0.419 (gpt-4o) | **$0.034** |
+**Failure_Run_with_promptv2** (18 prior failures from Third_Eval_Run):
+
+| Metric | Before (Third_Eval_Run) | After (promptv2 retry) |
+|--------|-------------------------|----------------------|
+| Pass rate on failures | 0% (0/18) | **27.8% (5/18)** |
+| New passes | — | 5 |
+| Still failing | 18/18 | 13/18 |
+| Errors | 0 | 0 |
+| Cost for 18 cases | — | $0.27 (gpt-4o) |
 
 ---
 
@@ -81,44 +83,41 @@ Eight mandatory rules appended at the end of role.md:
 
 ---
 
-## Actual Run 4 Results (20260724_215741)
+---
 
-### Newly Passing (+6 gross, −1 regression = +5 net)
+## Actual Run 4 Results (Failure_Run_with_promptv2, 20260724_220750)
 
-| Case | Difficulty | Root cause fixed |
-|------|-----------|-----------------|
-| `e06_orders_delivered_late` | easy | COUNT scalar shape (Ex8) |
+### Newly Passing (+5)
+
+| Case | Difficulty | Pattern fixed |
+|------|-----------|----------------|
 | `h06_compare_avg_review_score_time` | hard | Direct CASE in SELECT (Ex10) |
-| `h08_5_state_category_pairs_by` | hard | freight + no scope creep (Rule §2+§3) |
-| `m03_avg_order_value_gmv_state` | medium | Grain trap (Ex9) + no filter (Rule §3) |
-| `m08_monthly_order_count_full_trend` | medium | TO_CHAR bucket (Ex9) |
+| `h08_5_state_category_pairs_by` | hard | freight_value, no scope creep |
+| `m03_avg_order_value_gmv_state` | medium | Grain trap + TO_CHAR bucket |
+| `m08_monthly_order_count_full_trend` | medium | TO_CHAR monthly bucketing |
 | `m10_10_sellers_by_total_revenue` | medium | Ex3 rewrite: freight + stripped cols |
-
-### Regression (−1)
-
-| Case | Cause |
-|------|-------|
-| `h02_overall_repeat_customer_rate_customers` | Column ambiguity error — unrelated hallucination |
 
 ### Still Failing (13 cases)
 
-| Case | Difficulty | Status | Root cause |
-|------|-----------|--------|-----------|
-| `e01_5_selling_products_health_beauty` | easy | error | Hallucinated `p.product_name` column |
-| `e03_most_used_payment_methods_computers` | easy | fail | Rubric flag (FS-006) — ex=1 |
-| `e13_5_states_by_number_customers` | easy | fail | Gold ambiguity: gold uses `COUNT(*)`, agent uses `COUNT(DISTINCT customer_unique_id)` |
-| `h02_overall_repeat_customer_rate_customers` | hard | error | Ambiguous `customer_id` column in subquery |
-| `h04_5_categories_worst_late_delivery` | hard | fail | CTE removed; SQL logic still produces wrong results |
-| `h05_payment_method_share_5_revenue` | hard | fail | Complex window fn; no CTE but results differ |
-| `h07_multi_item_orders_items_from` | hard | error | GROUP BY scope: `total_orders.total_count` not in GROUP BY |
-| `h09_monthly_avg_order_value_trend` | hard | fail | Still uses EXTRACT split; TO_CHAR rule not adopted |
-| `h10_average_days_between_delivery_review` | hard | fail | Rubric time_frame flag — SQL executes correctly |
-| `m01_5_states_longest_delivery_time` | medium | fail | Rubric time_frame flag — ex=1, SQL correct |
-| `m05_bottom_5_categories_by_average` | medium | fail | Subquery logic issue |
-| `m09_avg_payment_value_payment_type` | medium | fail | Extra/missing columns vs gold |
-| `m13_order_count_distribution_customer_customers` | medium | fail | LIMIT still applied to distribution |
+| Case | Difficulty | Root cause |
+|------|-----------|------------|
+| `e01_5_selling_products_health_beauty` | easy | Hallucinated `p.product_name` column |
+| `e03_most_used_payment_methods_computers` | easy | Rubric flag (output shape?) |
+| `e06_orders_delivered_late` | easy | ← **FIXED in retry** |
+| `e13_5_states_by_number_customers` | easy | Gold ambiguity: `COUNT(*)` vs `COUNT(DISTINCT customer_unique_id)` |
+| `h04_5_categories_worst_late_delivery` | hard | CTE removed; logic still wrong |
+| `h05_payment_method_share_5_revenue` | hard | Window function complexity |
+| `h07_multi_item_orders_items_from` | hard | GROUP BY scope error |
+| `h09_monthly_avg_order_value_trend` | hard | EXTRACT split still used instead of TO_CHAR |
+| `h10_average_days_between_delivery_review` | hard | Rubric time_frame flag |
+| `m01_5_states_longest_delivery_time` | medium | Rubric time_frame flag (EX=1) |
+| `m05_bottom_5_categories_by_average` | medium | Subquery logic issue |
+| `m09_avg_payment_value_payment_type` | medium | Column mismatch vs gold |
+| `m13_order_count_distribution_customer_customers` | medium | LIMIT still applied to distribution |
 
 ---
+
+
 
 ## Rubric Dimension Delta
 
