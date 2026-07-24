@@ -147,3 +147,34 @@ LEFT JOIN product_category_translation pct
   ON p.product_category_name = pct.product_category_name
 -- pct.product_category_name_english may be NULL
 ```
+
+
+## Percentage Denominators
+
+For "X% of Y" questions, the denominator is Y (not "all rows").
+
+Example: "% of multi-item orders with 2+ categories"
+- **Numerator**: orders that are (multi-item AND have 2+ categories)
+- **Denominator**: orders that are (multi-item)
+- **Both must use the same Y filter**
+
+Pattern: Filter Y in a subquery (`HAVING COUNT(*) >= 2`), then compute
+the ratio inside that subquery using CASE or conditional aggregate:
+
+```sql
+-- Example: % of multi-item orders with 2+ categories
+SELECT
+  ROUND(
+    SUM(CASE WHEN n_categories >= 2 THEN 1 ELSE 0 END) * 100.0 / COUNT(*),
+    2
+  ) AS pct
+FROM (
+  SELECT order_id, COUNT(DISTINCT product_category_name) AS n_categories
+  FROM order_items
+  GROUP BY order_id
+  HAVING COUNT(*) > 1  -- multi-item filter
+) AS multi_item;
+```
+
+**Common mistake**: computing the ratio across all orders, not just Y.
+Always restrict to Y first, then compute numerator/denominator within that subset.

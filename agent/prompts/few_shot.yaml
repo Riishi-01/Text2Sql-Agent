@@ -130,7 +130,8 @@ WHERE order_status = 'delivered'
 ```
 
 *Note: "How many / count of / number of" → ONE row with COUNT(*).
-Do NOT return a list of orders with detail columns (order_id, dates, etc.).*
+This is the ONLY aggregation that skips ORDER BY — top N, distribution,
+and per-X aggregations all need it.*
 
 ---
 
@@ -140,7 +141,9 @@ Do NOT return a list of orders with detail columns (order_id, dates, etc.).*
 ```sql
 -- Pre-aggregate per order_id first, THEN average per state.
 -- Direct AVG(price + freight) averages line items — wrong grain.
-SELECT customer_state, ROUND(AVG(order_total), 2) AS avg_gmv
+SELECT customer_state,
+       ROUND(AVG(order_total), 2) AS avg_gmv,
+       COUNT(*) AS n_orders
 FROM (
     SELECT c.customer_state, o.order_id,
            SUM(i.price + i.freight_value) AS order_total
@@ -154,7 +157,9 @@ ORDER BY avg_gmv DESC
 LIMIT 5;
 ```
 
-*Note: Subquery (FROM (...) AS sub), NOT a CTE. No order_status filter.*
+*Note: Subquery (FROM (...) AS sub), NOT a CTE. No order_status filter.
+ALWAYS include the count column (n_orders) — every per-dimension
+aggregation should return (dimension, metric, n) for auditability.*
 
 ---
 
@@ -216,3 +221,71 @@ ORDER BY n_orders;
 
 *Note: Distribution = return ALL rows, no LIMIT.
 "Distribution of X" = one row per distinct X value.*
+
+---
+
+## Example 12: Ambiguous Phrasing — Default to Count
+**Question**: "Orders delivered late"
+
+```sql
+SELECT COUNT(*) AS orders_count
+FROM orders
+WHERE order_status = 'delivered'
+  AND order_delivered_customer_date IS NOT NULL
+  AND order_estimated_delivery_date IS NOT NULL
+  AND order_delivered_customer_date > order_estimated_delivery_date;
+```
+
+*Note: The question says "Orders" (noun) but doesn't say "show me" / "list" /
+"how many". Without an explicit verb, default to the scalar count. This SQL is
+identical to Example 7 — same logic, different question phrasing. Use this
+example to disambiguate noun-only questions.*
+
+
+---
+
+## Example 13: Simple Aggregation with ORDER BY
+**Question**: "Average payment value per payment type, highest first"
+
+```sql
+SELECT payment_type,
+       ROUND(AVG(payment_value), 2) AS avg_value,
+       COUNT(*) AS n
+FROM order_payments
+GROUP BY payment_type
+ORDER BY avg_value DESC;
+```
+
+*Note: Always include ORDER BY when ranking or when the question implies
+order ("highest first", "top", "bottom", "ordered by"). Even simple
+GROUP BY aggregations need explicit sorting unless the question
+explicitly doesn't care about order.*
+
+---
+
+## Example 15: Top-N Subset, Then Aggregate
+**Question**: "Average review score for the top 5 product categories by review count"
+
+```sql
+SELECT category, ROUND(avg_score, 2) AS avg_score, n_reviews
+FROM (
+  SELECT COALESCE(t.product_category_name_english, p.product_category_name) AS category,
+         AVG(r.review_score) AS avg_score,
+         COUNT(*) AS n_reviews
+  FROM order_reviews r
+  JOIN order_items oi ON r.order_id = oi.order_id
+  JOIN products p ON oi.product_id = p.product_id
+  LEFT JOIN product_category_translation t
+    ON p.product_category_name = t.product_category_name
+  GROUP BY COALESCE(t.product_category_name_english, p.product_category_name)
+) AS sub
+WHERE n_reviews >= 100
+ORDER BY n_reviews DESC
+LIMIT 5;
+```
+
+*Note: "Top N by X, then Y by Z" — first restrict to the top N (using
+LIMIT inside an aggregation subquery), then compute Y for just those N.
+Don't compute Y for all rows and then filter — that's the wrong denominator.
+The subquery computes counts/averages for all categories; the outer query
+selects the top 5 by count.*
