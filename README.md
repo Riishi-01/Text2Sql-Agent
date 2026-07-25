@@ -40,21 +40,6 @@ I wanted to know whether eval-driven prompt iteration actually beats hand-tuning
 
 9 Olist CSVs → 10 tables in the validator (9 raw + 1 derived `geolocation_by_zip` materialized view; raw `geolocation` is the R6 trap, blocked by design). CC BY-NC-SA 4.0 (non-commercial) — [Kaggle](https://www.kaggle.com/datasets/olistbr/brazilian-ecommerce). ~100k orders, 2016–2018. Known quirks documented in the failure stories (`docs/failure/`).
 
-## The solution
-
-```mermaid
-flowchart TB
-    Q["Question"] --> P["4-file prompt assembly<br/>role + semantic_model + few_shot + orientation<br/>+ {{NOW}} runtime resolution"]
-    P --> L["ChatOpenAI · gpt-4o<br/>temperature 0.0"]
-    L --> V{"R1–R9 static validator<br/>sqlglot parse + allow-list + LIMIT"}
-    V -->|pass| DB["nl2sql_ro role<br/>statement_timeout = 30s<br/>read-only transaction"]
-    V -->|fail| REF["Refuse<br/>return validator error to user"]
-    DB --> OUT["{sql, rows, columns,<br/>input_tokens, output_tokens}"]
-    L -.->|retry on validator reject| L
-```
-
-`{{NOW}}` is substituted at request time from `dataset_max_date` so the few-shot examples stay anchored as time advances.
-
 ## The 4-file prompt system
 
 | File | Role |
