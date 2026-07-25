@@ -16,6 +16,22 @@ flowchart LR
 
 The validator is a hard gate. The LLM can suggest anything, but `INSERT`, `pg_*`, `SELECT *`, or a CTE name from a sloppy R5 patch never reaches the database.
 
+## Query lifecycle with retry
+
+```mermaid
+flowchart TD
+    Q["User question"] --> A["agent/graph.py<br/>generate_sql()"]
+    A --> V{"R1–R9 static validator<br/>sqlglot parse + allow-list"}
+    V -->|pass| DB["DB fetch<br/>nl2sql_ro, 30s timeout"]
+    V -->|fail| C{"retry_count<br/>< max_retry<br/>(= 3)?"}
+    C -->|yes| A
+    C -->|no| X["Refuse<br/>return validation error"]
+    DB --> O["{sql, rows, columns,<br/>input_tokens, output_tokens}"]
+    X --> O
+```
+
+If the validator rejects the generated SQL (R1 parse error, R3 DDL keyword, R4 system catalog, R5 unknown table, R7 `SELECT *`, etc.), the agent regenerates with the validator's error message as additional context. After `max_retry = 3` failed attempts, the request is refused and the validation error is returned to the user.
+
 ## Why I built this
 
 I wanted to know whether eval-driven prompt iteration actually beats hand-tuning, and the answer turned out to be: *yes, but only if you measure honestly*. The first version of the prompt had a CTE bug I'd been quietly masking by writing more rules. The 39-case eval harness caught it in a single run. That's the whole project.
@@ -127,7 +143,7 @@ Full set in `docs/failure/`. The short version:
 ## Quick start
 
 ```bash
-git clone https://github.com/Riishi-Development/text2sql.git
+git clone https://github.com/Riishi-01/Text2Sql-Agent.git
 cd text2sql
 uv sync
 
