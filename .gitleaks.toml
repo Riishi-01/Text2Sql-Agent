@@ -1,0 +1,47 @@
+title = "text2sql gitleaks config"
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "openai-api-key"
+description = "OpenAI API key (covers sk- and sk-proj- formats)"
+regex = '''sk-(?:proj-)?[A-Za-z0-9_\-]{20,}(?:T3BlbkFJ[A-Za-z0-9_\-]{20,})?'''
+keywords = ["sk-"]
+tags = ["secret", "openai"]
+
+[[rules]]
+id = "langsmith-api-key"
+description = "LangSmith API key (lsv2_pt_ or lsv2_sk_ prefix)"
+regex = '''lsv2_(?:pt_|sk_)?[A-Za-z0-9]{20,}'''
+keywords = ["lsv2_"]
+tags = ["secret", "langsmith"]
+
+[[rules]]
+id = "anthropic-api-key"
+description = "Anthropic API key (sk-ant- prefix)"
+regex = '''sk-ant-[A-Za-z0-9_\-]{20,}'''
+keywords = ["sk-ant-"]
+tags = ["secret", "anthropic"]
+
+[allowlist]
+description = "Allow placeholder secrets in .env.example, docs, and sample data"
+paths = [
+  '''(.*/)?\.env\.example$''',
+  '''(.*/)?.*\.md$''',
+  '''(.*/)?data/sample\.csv$''',
+]
+regexes = [
+  '''(?i)sk-(?:your|test|placeholder|example|replace|xxx+|dummy|fake)[\-_A-Za-z0-9]*''',
+  '''(?i)sk-ant-(?:your|test|placeholder|example|replace|xxx+|dummy|fake)[\-_A-Za-z0-9]*''',
+  '''(?i)lsv2_(?:pt_|sk_)?(?:your|test|placeholder|example|replace|xxx+|dummy|fake)[\-_A-Za-z0-9]*''',
+  '''sk-proj-<REDACTED>[\-_A-Za-z0-9]*''',
+]
+regexTarget = "match"
+stopwords = [
+  "your-openai-api-key-here",
+  "your-langsmith-api-key-here",
+  "your-anthropic-api-key-here",
+  "your-kaggle-username",
+  "your-kaggle-api-key",
+]
