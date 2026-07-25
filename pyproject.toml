@@ -23,7 +23,7 @@ dependencies = [
 package = true
 
 [tool.setuptools.packages.find]
-include = ["agent*", "core*", "api*", "agents*"]
+include = ["agent*", "core*", "api*"]
 
 [project.scripts]
 olist-nl2sql = "agent.main:main"

@@ -8,3 +8,85 @@ wheels/
 
 # Virtual environments
 .venv
+
+# Secrets — never commit. Real keys would leak to git history forever.
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+*.p12
+
+# OS / editor artifacts
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Logs
+*.log
+logs/
+
+# AI agent working files — promote to docs/ if worth keeping, otherwise drop
+testing.md
+smoke_test.md
+test_plan.md
+test_cases.md
+*_test_plan.md
+*_smoke_test.md
+scratch_adr.md
+draft_adr.md
+scratch_*.md
+draft_*.md
+*_draft.md
+*_notes.md
+*_scratch.md
+agent_output*.md
+copilot_*.md
+claude_*.md
+cursor_*.md
+suggestions.md
+improvements.md
+review_notes.md
+audit_*.md
+wireframe_*.md
+ux_notes.md
+*_generated.md
+auto_*.md
+
+# Working / temp
+TODO.md
+FIXME.md
+NOTES.md
+scratchpad.*
+wip_*
+temp_*
+*.bak
+
+# Olist raw dataset (not committed — regenerate via scripts/db/fetch_olist_data.py).
+# The Olist data is CC BY-NC-SA 4.0 (non-commercial) and must not be redistributed.
+data/Olist Dataset/
+data/raw/
+*.csv.bak
+!data/sample.csv
+!data/README.md
+
+# Eval runtime artifacts — keep one canonical run only at evals/results/baseline/
+evals/results/checkpoints/
+evals/results/eval_run.csv
+evals/results/eval_run.per_query.json
+evals/results/eval_run.report.md
+evals/results/eval_run.summary.json
+evals/results/summary/
+!evals/results/baseline/
+
+# Test caches (already covered by __pycache__ but explicit is safer)
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+coverage.xml
