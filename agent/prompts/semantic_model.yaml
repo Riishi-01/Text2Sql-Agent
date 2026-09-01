@@ -180,11 +180,17 @@ These are logical relationships not enforced by database constraints:
 - "customer location" → customer_state or customer_city
 - "seller location" → seller_state or seller_city
 
-### Category Examples
-- "electronics" → informatica_acessorios
-- "furniture" → moveis_decoracao
-- "health/beauty" → beleza_saude
-- "sports" → esporte_lazer
+### Category Names (English ↔ Portuguese)
+- Product categories on `products.product_category_name` are stored in
+  Portuguese (e.g., `beleza_saude`, `informatica_acessorios`).
+- 71 categories have English translations in `product_category_translation`.
+- For ANY English category name in the question (e.g., "health/beauty",
+  "computers", "electronics", "furniture", "sports"), JOIN
+  `product_category_translation` and filter on
+  `product_category_name_english = '<English name>'`.
+- Do NOT substitute English → Portuguese directly in WHERE clauses.
+- Do NOT wrap `product_category_name_english` in `COALESCE(...)` for
+  grouping or filtering — use the raw English column.
 
 ## Sample Values
 

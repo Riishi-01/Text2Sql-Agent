@@ -1,7 +1,7 @@
-"""Static SQL Safety Validator (R1-R9).
+"""Static SQL Safety Validator (R1-R10).
 
 This validator is independent of the LLM. It is deterministic, side-effect-free,
-and testable without network. It enforces 9 hard rules:
+and testable without network. It enforces 10 hard rules:
 
 R1: Parse - sqlglot parse must succeed
 R2: Top-level - must be SELECT or WITH...SELECT
@@ -12,10 +12,12 @@ R6: Trap table - raw geolocation rejected; geolocation_by_zip is the only allowe
 R7: No SELECT * - list every column explicitly
 R8: LIMIT - auto-injected LIMIT for non-aggregating queries; default 1000
 R9: Soft-FK LEFT JOIN - INNER JOIN category_translation warns (does not block)
+R10: Column existence - every referenced column must exist in the schema catalog
+     (catches hallucinated columns like p.product_name)
 """
 import re
 from dataclasses import dataclass, field
-from typing import List, Set, Optional, Tuple
+from typing import Dict, List, Optional, Set, Tuple
 import sqlglot
 from sqlglot import exp
 
@@ -50,6 +52,89 @@ SYSTEM_CATALOG_PATTERNS: List[str] = [
     r"^pg_",
     r"^information_schema",
 ]
+
+# Schema column catalog (R10). Mirrors agent/prompts/semantic_model.yaml.
+# Lowercased table → set of lowercased column names. The validator rejects
+# any column reference that cannot be resolved to a real table/column pair.
+SCHEMA_COLUMNS: Dict[str, Set[str]] = {
+    "customers": {
+        "customer_id",
+        "customer_unique_id",
+        "customer_zip_code_prefix",
+        "customer_city",
+        "customer_state",
+    },
+    "sellers": {
+        "seller_id",
+        "seller_zip_code_prefix",
+        "seller_city",
+        "seller_state",
+    },
+    "products": {
+        "product_id",
+        "product_category_name",
+        "product_name_lenght",
+        "product_description_lenght",
+        "product_photos_qty",
+        "product_weight_g",
+        "product_length_cm",
+        "product_height_cm",
+        "product_width_cm",
+    },
+    "product_category_translation": {
+        "product_category_name",
+        "product_category_name_english",
+    },
+    "orders": {
+        "order_id",
+        "customer_id",
+        "order_status",
+        "order_purchase_timestamp",
+        "order_approved_at",
+        "order_delivered_carrier_date",
+        "order_delivered_customer_date",
+        "order_estimated_delivery_date",
+    },
+    "order_items": {
+        "order_id",
+        "order_item_id",
+        "product_id",
+        "seller_id",
+        "shipping_limit_date",
+        "price",
+        "freight_value",
+    },
+    "order_payments": {
+        "order_id",
+        "payment_sequential",
+        "payment_type",
+        "payment_installments",
+        "payment_value",
+    },
+    "order_reviews": {
+        "review_id",
+        "order_id",
+        "review_score",
+        "review_comment_title",
+        "review_comment_message",
+        "review_creation_date",
+        "review_answer_timestamp",
+    },
+    "geolocation": {
+        "geolocation_zip_code_prefix",
+        "geolocation_lat",
+        "geolocation_lng",
+        "geolocation_city",
+        "geolocation_state",
+    },
+    "geolocation_by_zip": {
+        "geolocation_zip_code_prefix",
+        "geolocation_lat",
+        "geolocation_lng",
+        "geolocation_city",
+        "geolocation_state",
+    },
+}
 
 
 @dataclass
@@ -403,12 +488,146 @@ def validate_r9_soft_fk(sql: str) -> Tuple[bool, str]:
     return False, ""
 
 
-def validate_sql(sql: str, default_limit: int = 1000) -> ValidationResult:
-    """Validate SQL query against all rules (R1-R9).
+def _resolve_column_table(
+    column: exp.Column,
+    tables_in_query: Set[str],
+) -> Optional[str]:
+    """Resolve a column reference to its physical table.
+
+    Resolution order:
+    1. Explicit alias prefix (e.g. `p.product_id` → table aliased as `p`).
+    2. Unprefixed column when only one table is in scope.
+    3. Otherwise return None (cannot resolve — caller decides whether to flag).
+
+    Args:
+        column: sqlglot Column node.
+        tables_in_query: Set of table names appearing in the query.
+
+    Returns:
+        Physical table name (without alias) or None if unresolvable.
+    """
+    table_ref = column.table
+    if table_ref:
+        # Strip quotes that sqlglot may preserve
+        return table_ref.lower().replace('"', "")
+
+    # No prefix — only resolvable if there's exactly one table in scope
+    if len(tables_in_query) == 1:
+        return next(iter(tables_in_query))
+
+    return None
+
+
+def validate_r10_column_exists(
+    sql: str,
+    schema_columns: Optional[Dict[str, Set[str]]] = None,
+) -> Tuple[bool, List[str]]:
+    """R10: Every referenced column must exist in the schema catalog.
+
+    Catches hallucinated columns (e.g. `p.product_name` on the `products`
+    table). Does NOT reject computed expressions, aggregates, or constants —
+    only raw column references that resolve to a real table.
+
+    Args:
+        sql: SQL query string.
+        schema_columns: Optional override of the column catalog. Defaults
+            to the module-level SCHEMA_COLUMNS dict.
+
+    Returns:
+        (valid, list_of_error_messages). valid=True means no invented columns.
+    """
+    catalog = schema_columns if schema_columns is not None else SCHEMA_COLUMNS
+    errors: List[str] = []
+
+    try:
+        parsed = sqlglot.parse(sql, dialect="postgres")
+    except Exception as e:
+        # R1 should have caught this; fail open here.
+        return True, [f"R10 column-exists: parse error passthrough: {e}"]
+
+    known_tables = extract_tables(sql)
+    # Map alias → physical table (case-insensitive)
+    alias_to_table: Dict[str, str] = {}
+    try:
+        for statement in parsed:
+            if not statement:
+                continue
+            for table_node in statement.find_all(exp.Table):
+                phys = table_node.name.lower()
+                alias = (table_node.alias or "").lower()
+                if alias:
+                    alias_to_table[alias] = phys
+                # A table may be referenced by its own name
+                alias_to_table[phys] = phys
+    except Exception:
+        pass
+
+    try:
+        # Collect SELECT alias names so we don't false-positive on bare
+        # identifier references in ORDER BY / GROUP BY that point at an
+        # alias (e.g. `ORDER BY my_alias` after `SELECT ... AS my_alias`).
+        alias_names: Set[str] = set()
+        for statement in parsed:
+            if not statement:
+                continue
+            for alias_node in statement.find_all(exp.Alias):
+                alias_ident = alias_node.alias
+                if alias_ident:
+                    alias_names.add(alias_ident.lower().replace('"', ""))
+
+        for statement in parsed:
+            if not statement:
+                continue
+            for col in statement.find_all(exp.Column):
+                col_name = col.name.lower().replace('"', "")
+
+                # Skip SELECT aliases — they are not column references
+                if col_name in alias_names:
+                    continue
+
+                # Resolve physical table via alias if present
+                prefix = (col.table or "").lower().replace('"', "")
+                physical: Optional[str] = None
+                if prefix:
+                    physical = alias_to_table.get(prefix)
+                    if physical is None and prefix in known_tables:
+                        physical = prefix
+                else:
+                    physical = _resolve_column_table(col, known_tables)
+
+                # If we can't resolve, be permissive — R5 already gates
+                # tables, and ambiguous refs will fail at execution.
+                if physical is None:
+                    continue
+
+                allowed = catalog.get(physical)
+                if allowed is None:
+                    # Unknown physical table — R5 territory, skip.
+                    continue
+
+                if col_name not in allowed:
+                    errors.append(
+                        f"R10 column-exists: column '{col_name}' not found "
+                        f"on table '{physical}' "
+                        f"(available: {sorted(allowed)})"
+                    )
+    except Exception as e:
+        return True, [f"R10 column-exists: AST walk error: {e}"]
+
+    return len(errors) == 0, errors
+
+
+def validate_sql(
+    sql: str,
+    default_limit: int = 1000,
+    schema_columns: Optional[Dict[str, Set[str]]] = None,
+) -> ValidationResult:
+    """Validate SQL query against all rules (R1-R10).
     
     Args:
         sql: SQL query string
         default_limit: Default LIMIT value for R8
+        schema_columns: Optional override of column catalog for R10
         
     Returns:
         ValidationResult with valid flag, errors, warnings
@@ -470,6 +689,12 @@ def validate_sql(sql: str, default_limit: int = 1000) -> ValidationResult:
     has_warning, warning = validate_r9_soft_fk(sql)
     if has_warning:
         warnings.append(warning)
+    
+    # R10: Column existence (safety net for invented columns)
+    valid, col_errors = validate_r10_column_exists(sql, schema_columns)
+    if not valid:
+        errors.extend(col_errors)
+        rule_failures.append("R10")
     
     # Determine overall validity
     is_valid = len(errors) == 0

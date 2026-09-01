@@ -289,3 +289,52 @@ LIMIT inside an aggregation subquery), then compute Y for just those N.
 Don't compute Y for all rows and then filter — that's the wrong denominator.
 The subquery computes counts/averages for all categories; the outer query
 selects the top 5 by count.*
+
+---
+
+## Example 16: 4-Hop Query — orders → items → products → translation
+**Question**: "Monthly average order value for the health/beauty category, with order count"
+
+This walks the full 4-hop chain. Watch every step:
+(1) orders → filter on `order_status='delivered'` and `IS NOT NULL` checks
+on the delivery timestamps BEFORE joining further (this is where filters
+get lost most often).
+(2) order_items → pre-aggregate per order (`SUM(price + freight_value)`).
+(3) products → join to get category.
+(4) product_category_translation → LEFT JOIN, filter on the English name.
+(5) Outer aggregation → bucket by month with `TO_CHAR`, include the
+`COUNT(*) AS n_orders` audit column.
+
+```sql
+SELECT
+    TO_CHAR(o.order_purchase_timestamp, 'YYYY-MM') AS ym,
+    ROUND(AVG(order_total), 2) AS avg_order_value,
+    COUNT(*) AS n_orders
+FROM (
+    SELECT o.order_id,
+           o.order_purchase_timestamp,
+           SUM(oi.price + oi.freight_value) AS order_total
+    FROM orders o
+    JOIN order_items oi ON o.order_id = oi.order_id
+    JOIN products p ON oi.product_id = p.product_id
+    LEFT JOIN product_category_translation t
+        ON p.product_category_name = t.product_category_name
+    WHERE o.order_status = 'delivered'
+      AND o.order_delivered_customer_date IS NOT NULL
+      AND o.order_estimated_delivery_date IS NOT NULL
+      AND t.product_category_name_english = 'health_beauty'
+    GROUP BY o.order_id, o.order_purchase_timestamp
+) AS sub
+JOIN orders o ON o.order_id = sub.order_id
+GROUP BY TO_CHAR(o.order_purchase_timestamp, 'YYYY-MM')
+ORDER BY ym;
+```
+
+*Note: All 4 hops (orders → order_items → products →
+product_category_translation) are walked inside the inner FROM clause.
+Filters (`order_status`, `IS NOT NULL`, English category name) live next
+to the joins that introduce their tables — do not push filters to the
+outer query. Always include `COUNT(*) AS n_orders` in per-period
+aggregations for auditability. The outer query re-joins `orders` only to
+expose `order_purchase_timestamp` for the `TO_CHAR` bucketing; this is
+intentional and avoids double-bucketing inside the subquery.*
