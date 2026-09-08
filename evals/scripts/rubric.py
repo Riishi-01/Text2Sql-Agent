@@ -351,6 +351,11 @@ def grade_time_frame(sql: str, rubric_block: Dict[str, Any]) -> str:
         return NA
 
     sql_low = sql.lower()
+    # Normalize equivalent date-extraction syntax so hints match either form.
+    # EXTRACT(day FROM ...) and DATE_PART('day', ...) are interchangeable.
+    sql_low = sql_low.replace("extract(day from ", "date_part('day', ")
+    sql_low = sql_low.replace("extract(year from ", "date_part('year', ")
+    sql_low = sql_low.replace("extract(month from ", "date_part('month', ")
     hints = re.findall(r"[a-z_]+\(", spec)
     if not hints:
         return NA
