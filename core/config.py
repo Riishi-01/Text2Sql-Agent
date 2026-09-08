@@ -63,6 +63,10 @@ class Settings:
         return f"postgresql+asyncpg://{self.sandbox_user}:{self.sandbox_password}@{self.pg_host}:{self.pg_port}/{self.sandbox_db}"
 
     @property
+    def DATA_DIR(self) -> Path:  # noqa: N802
+        return self.data_dir
+
+    @property
     def SANDBOX_USER(self) -> str:  # noqa: N802
         return self.sandbox_user
 
