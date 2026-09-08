@@ -324,31 +324,95 @@ def _row_sort_key(row: Any) -> tuple:
     return tuple(key)
 
 
-def _rows_equal(rows_a: List[Any], rows_b: List[Any]) -> bool:
-    if len(rows_a) != len(rows_b):
-        return False
+def _rows_equal(
+    rows_a: List[Any],
+    rows_b: List[Any],
+    *,
+    label: str = "",
+    trim_to_gold_cols: bool = False,
+) -> Tuple[bool, str]:
+    """Compare two row sets for EX equivalence.
 
-    # Sort both by a VALUE-based key (column names ignored) so that result sets
-    # produced with different aliases still align row-for-row.
+    Returns (equal, reason). Empty reason when equal.
+
+    Generic behaviors (no case-specific logic):
+    - Row order is ignored: both sides are sorted by value-based key first.
+    - When trim_to_gold_cols is True, if predicted has more columns than
+      gold, the trailing extra columns are dropped so the comparison runs
+      against the gold's column count. Symmetric: if gold has more, gold's
+      trailing columns are also dropped. Default is False — verbose
+      questions now specify the exact column count expected, so deviations
+      are real failures, not tolerated leniency.
+    - Value comparison uses _values_equal, which applies numeric tolerance
+      and NULL==NULL semantics.
+
+    A non-empty reason describes the first disagreement found:
+    row count, col count mismatch, or value mismatch with row/col location.
+    """
+    if len(rows_a) != len(rows_b):
+        return False, (
+            f"[{label}] row count differs: gold={len(rows_a)}, predicted={len(rows_b)}"
+        )
+
     sorted_a = sorted(rows_a, key=_row_sort_key)
     sorted_b = sorted(rows_b, key=_row_sort_key)
 
-    for ra, rb in zip(sorted_a, sorted_b):
+    for i, (ra, rb) in enumerate(zip(sorted_a, sorted_b)):
         vals_a = _row_values(ra)
         vals_b = _row_values(rb)
+
         if len(vals_a) != len(vals_b):
-            return False
-        for va, vb in zip(vals_a, vals_b):
-            if not _values_equal(va, vb):
-                return False
-    return True
+            if not trim_to_gold_cols:
+                which = "predicted" if len(vals_b) > len(vals_a) else "gold"
+                return False, (
+                    f"[{label}] col count differs on row {i}: "
+                    f"gold={len(vals_a)}, predicted={len(vals_b)} "
+                    f"(extras on {which})"
+                )
+            # trim_to_gold_cols=True: tolerate trailing extras; compare common prefix
+            n = min(len(vals_a), len(vals_b))
+        else:
+            n = len(vals_a)
+
+        for j in range(n):
+            if not _values_equal(vals_a[j], vals_b[j]):
+                return False, (
+                    f"[{label}] value differs on row {i}, col {j}: "
+                    f"gold={vals_a[j]!r}, predicted={vals_b[j]!r}"
+                )
+
+    if len(rows_a) == 0:
+        return True, f"[{label}] both empty"
+    return True, f"[{label}] rows equal ({len(rows_a)} rows)"
 
 
-def compute_ex(gold_rows: List[Any], predicted_rows: List[Any]) -> int:
+def compute_ex(
+    gold_rows: List[Any],
+    predicted_rows: List[Any],
+    *,
+    label: str = "",
+    log_path: Optional[Path] = None,
+    trim_to_gold_cols: bool = True,
+) -> int:
+    """Returns 1 if EX-equal, 0 otherwise. Optionally logs the reason."""
     try:
-        return 1 if _rows_equal(gold_rows, predicted_rows) else 0
-    except Exception:
-        return 0
+        equal, reason = _rows_equal(
+            gold_rows,
+            predicted_rows,
+            label=label,
+            trim_to_gold_cols=trim_to_gold_cols,
+        )
+    except Exception as e:
+        reason = f"[{label}] EX error: {e}"
+        equal = False
+
+    if log_path is not None:
+        try:
+            with log_path.open("a") as f:
+                f.write(reason + "\n")
+        except Exception:
+            pass
+    return 1 if equal else 0
 
 
 # ── Cost / pricing (model mode) ──────────────────────────────────────────
@@ -464,6 +528,7 @@ def run_single_case(
         "question": question,
         "em": 0,
         "ex": 0,
+        "ex_reason": "",
         "latency_sec": 0.0,
         "input_tokens": 0,
         "output_tokens": 0,
@@ -514,7 +579,12 @@ def run_single_case(
                 # EX: agent's rows vs gold rows.
                 # If refused / errored the agent returns rows=None → treat as []
                 predicted_rows = agent_rows if agent_rows is not None else []
-                ex = compute_ex(gold_rows, predicted_rows)
+                ex, ex_reason = _rows_equal(
+                    gold_rows, predicted_rows,
+                    label=query_id,
+                    trim_to_gold_cols=False,
+                )
+                result["ex_reason"] = ex_reason
 
                 result["em"] = em
                 result["ex"] = ex
@@ -585,7 +655,12 @@ def run_single_case(
 
                 # 3. EM / EX.
                 em, _em_raw = compute_em(gold_sql, predicted_sql)
-                ex = compute_ex(gold_rows, predicted_rows)
+                ex, ex_reason = _rows_equal(
+                    gold_rows, predicted_rows,
+                    label=query_id,
+                    trim_to_gold_cols=False,
+                )
+                result["ex_reason"] = ex_reason
                 result["em"] = em
                 result["ex"] = ex
 
@@ -1015,11 +1090,21 @@ def main(argv: Optional[List[str]] = None) -> int:
     csv_path       = metrics_dir / "eval_run.csv"
     per_query_path = metrics_dir / "per_query.json"
     summary_path   = metrics_dir / "summary.json"
+    ex_log_path    = metrics_dir / "ex_reasons.log"
 
     write_csv(all_results, csv_path)
     write_per_query_json(all_results, per_query_path)
     summary = build_summary(all_results, run_id, mode_label)
     summary_path.write_text(json.dumps(summary, indent=2, default=str), encoding="utf-8")
+
+    # Per-case EX reason log — one line per case, explains why EX passed/failed.
+    with ex_log_path.open("w") as f:
+        for r in all_results:
+            reason = r.get("ex_reason") or ""
+            if not reason:
+                ex_flag = r.get("ex", 0)
+                reason = f"[{r.get('query_id','?')}] EX={'pass' if ex_flag else 'fail'} (no reason captured)"
+            f.write(reason + "\n")
 
     # Split results into passes/ and failures/ aggregate files.
     write_case_splits(all_results, passes_dir, failures_dir)

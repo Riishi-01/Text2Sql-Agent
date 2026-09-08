@@ -257,9 +257,10 @@ cases:
       required: false
     aggregation:
       required: true
-      spec: COUNT DISTINCT
+      spec: COUNT(DISTINCT)
       items:
-      - COUNT DISTINCT
+      - COUNT
+      - DISTINCT
     join:
       required: false
     date_operator:
@@ -636,24 +637,24 @@ cases:
   trap: null
   tags:
   - D5_distribution
-  question: Top 5 states by number of customers (with most customers first)
+  question: Top 5 Brazilian states by number of distinct customers, where a customer is a unique person identified by customer_unique_id and the same person placing multiple orders counts as one customer; show the states with the most customers first
   gold_sql: |
-    SELECT customer_state, COUNT(*) AS n FROM customers GROUP BY customer_state ORDER BY n DESC LIMIT 5
+    SELECT customer_state, COUNT(DISTINCT customer_unique_id) AS n FROM customers GROUP BY customer_state ORDER BY n DESC LIMIT 5
   expected:
     shape:
       rows: 5
       cols: 2
     expected_rows:
     - - SP
-      - 41746
+      - 40302
     - - RJ
-      - 12852
+      - 12384
     - - MG
-      - 11635
+      - 11259
     - - RS
-      - 5466
+      - 5277
     - - PR
-      - 5045
+      - 4882
     columns:
     - customer_state
     - n
@@ -672,9 +673,10 @@ cases:
       required: false
     aggregation:
       required: true
-      spec: COUNT
+      spec: COUNT(DISTINCT)
       items:
       - COUNT
+      - DISTINCT
     join:
       required: false
     date_operator:
@@ -1020,46 +1022,46 @@ cases:
   trap: null
   tags:
   - D9_operational_kpi
-  question: Top 5 categories with worst late delivery rate (>=50 delivered orders)
+  question: Top 5 product categories with the worst late-delivery rate, where the rate is the percentage of delivered orders (with non-null delivery date and estimated delivery date) that were delivered after the estimated date, computed as (count of late orders) divided by (count of delivered orders) per category, and only categories with at least 50 delivered orders are eligible
   gold_sql: |
-    SELECT T3.product_category_name_english AS category,
-           COUNT(*) AS n_delivered,
-           ROUND(100.0 * SUM(CASE WHEN T1.order_delivered_customer_date > T1.order_estimated_delivery_date THEN 1 ELSE 0 END) / COUNT(*), 2) AS pct_late
-    FROM orders T1
-    JOIN order_items T4 ON T1.order_id = T4.order_id
-    JOIN products T5 ON T4.product_id = T5.product_id
-    LEFT JOIN product_category_translation T3 ON T5.product_category_name = T3.product_category_name
-    WHERE T1.order_status = 'delivered'
-      AND T1.order_delivered_customer_date IS NOT NULL
-      AND T1.order_estimated_delivery_date IS NOT NULL
-    GROUP BY T3.product_category_name_english
-    HAVING COUNT(*) >= 50
-    ORDER BY pct_late DESC
+    SELECT COALESCE(t.product_category_name_english, p.product_category_name) AS category,
+           ROUND(SUM(CASE WHEN o.order_delivered_customer_date > o.order_estimated_delivery_date THEN 1 ELSE 0 END) * 100.0 / COUNT(DISTINCT o.order_id), 2) AS late_delivery_rate_pct,
+           COUNT(DISTINCT o.order_id) AS n_delivered_orders
+    FROM orders o
+    JOIN order_items oi ON o.order_id = oi.order_id
+    JOIN products p ON oi.product_id = p.product_id
+    LEFT JOIN product_category_translation t ON p.product_category_name = t.product_category_name
+    WHERE o.order_status = 'delivered'
+      AND o.order_delivered_customer_date IS NOT NULL
+      AND o.order_estimated_delivery_date IS NOT NULL
+    GROUP BY COALESCE(t.product_category_name_english, p.product_category_name)
+    HAVING COUNT(DISTINCT o.order_id) >= 50
+    ORDER BY late_delivery_rate_pct DESC, n_delivered_orders DESC
     LIMIT 5
   expected:
     shape:
       rows: 5
       cols: 3
     expected_rows:
-    - - audio
-      - 362
-      - 12.71
-    - - fashion_underwear_beach
-      - 127
-      - 12.6
     - - christmas_supplies
-      - 150
-      - 12
-    - - books_technical
-      - 263
-      - 11.03
-    - - home_confort
-      - 429
-      - 10.26
+      - 14.4
+      - 125
+    - - fashion_underwear_beach
+      - 13.68
+      - 117
+    - - audio
+      - 13.22
+      - 348
+    - - construction_tools_lights
+      - 12.4
+      - 242
+    - - office_furniture
+      - 11.88
+      - 1254
     columns:
     - category
-    - n_delivered
-    - pct_late
+    - late_delivery_rate_pct
+    - n_delivered_orders
   acceptable_variants:
   - (see gold_sql)
   business_meaning: Top 5 categories with worst late delivery rate (>=50 delivered orders)
@@ -1113,96 +1115,124 @@ cases:
   trap: null
   tags:
   - D5_distribution
-  question: Payment method share per top-5 revenue category (using window function)
+  question: For each of the top-5 revenue product categories, show each payment method's share of the category's total payment value, where revenue is computed from order items as sum of price plus freight_value and share is expressed as a percentage of the category's total payment value (not as a count of payments)
   gold_sql: |
-    SELECT cat AS category, payment_type, ROUND(100.0 * n / SUM(n) OVER (PARTITION BY cat), 1) AS pct
+    SELECT sub.category, sub.payment_type,
+           ROUND(sub.payment_value, 2) AS payment_value,
+           ROUND(sub.payment_value * 100.0 / SUM(sub.payment_value) OVER (PARTITION BY sub.category), 2) AS payment_share_pct
     FROM (
-      SELECT T3.product_category_name_english AS cat, op.payment_type, COUNT(*) AS n
-      FROM order_payments op
-      JOIN orders o ON op.order_id = o.order_id
-      JOIN order_items i ON o.order_id = i.order_id
-      JOIN products p ON i.product_id = p.product_id
-      LEFT JOIN product_category_translation T3 ON p.product_category_name = T3.product_category_name
-      WHERE T3.product_category_name_english IN (
-        SELECT T3.product_category_name_english
-        FROM order_items i
-        JOIN products p ON i.product_id = p.product_id
-        LEFT JOIN product_category_translation T3 ON p.product_category_name = T3.product_category_name
-        GROUP BY T3.product_category_name_english
-        ORDER BY SUM(i.price + i.freight_value) DESC LIMIT 5
+      SELECT COALESCE(pct.product_category_name_english, p.product_category_name) AS category,
+             op.payment_type,
+             SUM(op.payment_value) AS payment_value
+      FROM orders o
+      JOIN order_payments op ON o.order_id = op.order_id
+      JOIN order_items oi ON o.order_id = oi.order_id
+      JOIN products p ON oi.product_id = p.product_id
+      LEFT JOIN product_category_translation pct ON p.product_category_name = pct.product_category_name
+      WHERE COALESCE(pct.product_category_name_english, p.product_category_name) IN (
+        SELECT top_cat.category FROM (
+          SELECT COALESCE(pct2.product_category_name_english, p2.product_category_name) AS category,
+                 SUM(oi2.price + oi2.freight_value) AS revenue
+          FROM order_items oi2
+          JOIN products p2 ON oi2.product_id = p2.product_id
+          LEFT JOIN product_category_translation pct2 ON p2.product_category_name = pct2.product_category_name
+          GROUP BY COALESCE(pct2.product_category_name_english, p2.product_category_name)
+          ORDER BY revenue DESC LIMIT 5
+        ) AS top_cat
       )
-    GROUP BY T3.product_category_name_english, op.payment_type
+      GROUP BY COALESCE(pct.product_category_name_english, p.product_category_name), op.payment_type
     ) AS sub
-    ORDER BY cat, pct DESC
+    ORDER BY sub.category, payment_share_pct DESC
   expected:
     shape:
       rows: 20
-      cols: 3
+      cols: 4
     expected_rows:
     - - bed_bath_table
       - credit_card
-      - 75.8
+      - 1386451.30
+      - 80.96
     - - bed_bath_table
       - boleto
-      - 15.9
+      - 259447.47
+      - 15.15
     - - bed_bath_table
       - voucher
-      - 7.2
+      - 44839.75
+      - 2.62
     - - bed_bath_table
       - debit_card
-      - 1.2
+      - 21815.15
+      - 1.27
     - - computers_accessories
       - credit_card
-      - 67.3
+      - 976363.85
+      - 61.59
     - - computers_accessories
       - boleto
-      - 26.7
+      - 569760.86
+      - 35.94
     - - computers_accessories
       - voucher
-      - 4.2
+      - 21508.76
+      - 1.36
     - - computers_accessories
       - debit_card
-      - 1.8
+      - 17696.98
+      - 1.12
     - - health_beauty
       - credit_card
-      - 75.9
+      - 1326716.99
+      - 80.05
     - - health_beauty
       - boleto
-      - 18.7
+      - 280491.76
+      - 16.92
     - - health_beauty
       - voucher
-      - 3.9
+      - 26892.45
+      - 1.62
     - - health_beauty
       - debit_card
-      - 1.6
+      - 23271.92
+      - 1.40
     - - sports_leisure
       - credit_card
-      - 74.2
+      - 1088571.54
+      - 78.19
     - - sports_leisure
       - boleto
-      - 19.8
+      - 254207.28
+      - 18.26
     - - sports_leisure
       - voucher
-      - 4.6
+      - 29120.47
+      - 2.09
     - - sports_leisure
       - debit_card
-      - 1.4
+      - 20228.27
+      - 1.45
     - - watches_gifts
       - credit_card
-      - 78.3
+      - 1169481.98
+      - 81.83
     - - watches_gifts
       - boleto
-      - 16.5
+      - 208051.79
+      - 14.56
     - - watches_gifts
       - voucher
-      - 4.1
+      - 28187.80
+      - 1.97
     - - watches_gifts
       - debit_card
-      - 1
+      - 23495.11
+      - 1.64
     columns:
     - category
     - payment_type
-    - pct
+    - payment_value
+    - payment_share_pct
   acceptable_variants:
   - (see gold_sql)
   business_meaning: Payment method share per top-5 revenue category (using window function)
@@ -1220,9 +1250,8 @@ cases:
       required: false
     aggregation:
       required: true
-      spec: COUNT,SUM
+      spec: SUM
       items:
-      - COUNT
       - SUM
     join:
       required: true
@@ -2497,7 +2526,7 @@ cases:
   trap: null
   tags:
   - D5_distribution
-  question: Order count distribution per customer (how many customers ordered N times?)
+  question: Distribution of how many customers have placed exactly N orders, where N is the number of distinct order_id values per customer, and the distribution must include every distinct value of N observed in the data without truncation
   gold_sql: |
     SELECT n_orders, COUNT(*) AS n_customers
     FROM (
@@ -2506,10 +2535,9 @@ cases:
     ) AS sub
     GROUP BY n_orders
     ORDER BY n_orders
-    LIMIT 5
   expected:
     shape:
-      rows: 5
+      rows: 9
       cols: 2
     expected_rows:
     - - 1
@@ -2522,6 +2550,14 @@ cases:
       - 30
     - - 5
       - 8
+    - - 6
+      - 6
+    - - 7
+      - 3
+    - - 9
+      - 1
+    - - 17
+      - 1
     columns:
     - n_orders
     - n_customers
