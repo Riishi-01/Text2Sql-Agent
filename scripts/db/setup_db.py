@@ -9,7 +9,7 @@ from asyncpg import Connection
 
 # Add parent to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from config import settings
+from core.config import settings
 
 
 async def create_database_and_role(conn: Connection):
@@ -276,13 +276,19 @@ async def grant_sandbox_permissions(conn: Connection):
 async def main():
     """Main setup function."""
     print("Setting up PostgreSQL database...")
-    print(f"Admin DB: {settings.ADMIN_DB_URL}")
+    print("Admin DB: postgresql://postgres@localhost:5432/postgres")
     print(f"Sandbox DB: {settings.SANDBOX_DB}")
     print(f"Sandbox User: {settings.SANDBOX_USER}")
     print()
     
     # Connect to default postgres database for admin tasks
-    admin_conn = await asyncpg.connect(settings.ADMIN_DB_URL)
+    admin_conn = await asyncpg.connect(
+        host='localhost',
+        port=5432,
+        user='postgres',
+        password='postgres',
+        database='postgres',
+    )
     
     try:
         # Create database and user
