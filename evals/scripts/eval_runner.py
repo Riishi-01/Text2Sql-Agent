@@ -81,6 +81,7 @@ PRICING_USD_PER_1M = {
     "gpt-4.1": {"input": 10.00, "output": 40.00},
     "gpt-4.1-mini": {"input": 0.40, "output": 1.60},
     "o4-mini": {"input": 4.00, "output": 16.00},
+    "gpt-5.4": {"input": 2.50, "output": 15.00},
 }
 
 MAX_RETRIES = 2

@@ -1970,7 +1970,7 @@ cases:
   trap: null
   tags:
   - D6_quality
-  question: Bottom 5 categories by average review score (only categories with at least 100 reviews)
+  question: Bottom 5 named product categories (with an English translation) by average review score, considering only categories with at least 100 reviews and excluding rows with no category
   gold_sql: |
     SELECT T3.product_category_name_english AS category,
            ROUND(AVG(T1.review_score), 2) AS avg_score,
@@ -1980,6 +1980,7 @@ cases:
     JOIN order_items T4 ON T2.order_id = T4.order_id
     JOIN products T5 ON T4.product_id = T5.product_id
     LEFT JOIN product_category_translation T3 ON T5.product_category_name = T3.product_category_name
+    WHERE T3.product_category_name_english IS NOT NULL
     GROUP BY T3.product_category_name_english
     HAVING COUNT(*) >= 100
     ORDER BY avg_score ASC, T3.product_category_name_english
@@ -1990,27 +1991,27 @@ cases:
       cols: 3
     expected_rows:
     - - office_furniture
-      - 3.48
-      - 1701
+      - 3.49
+      - 1677
     - - fashion_male_clothing
-      - 3.62
-      - 132
+      - 3.64
+      - 130
     - - fixed_telephony
-      - 3.67
-      - 265
-    - - null
-      - 3.81
-      - 1636
+      - 3.68
+      - 262
     - - audio
-      - 3.81
-      - 365
+      - 3.83
+      - 360
+    - - construction_tools_safety
+      - 3.84
+      - 193
     columns:
     - category
     - avg_score
     - n_reviews
   acceptable_variants:
   - (see gold_sql)
-  business_meaning: Bottom 5 categories by average review score (only categories with at least 100 reviews)
+  business_meaning: Bottom 5 named categories by average review score (only categories with at least 100 reviews, excluding rows with no category)
   rubric:
     table:
       required: true
