@@ -1,8 +1,8 @@
 # Olist NL2SQL Agent
 
-> A read-only LangGraph NL2SQL agent for the Olist e-commerce dataset — ask in English, get a validated SQL query and the rows back. The interesting part isn't the agent: it's the eval harness underneath it. 39 hand-curated cases, 5-dimension rubric grading, and a measured story of which prompt fixes actually moved the pass rate (53.8% → 66.7%) versus which only added cost.
+> A read-only LangGraph NL2SQL agent for the Olist e-commerce dataset — ask in English, get a validated SQL query and the rows back. The interesting part isn't the agent: it's the eval harness underneath it. 39 hand-curated cases, 5-dimension rubric grading, and a measured story of which prompt fixes actually moved the pass rate (53.8% → 66.7%) versus which only added cost — with the per-model improvement story on the 13 hardest cases below.
 
-## The 30-second picture
+## Agentic Workflow diagram
 
 ```mermaid
 flowchart LR
@@ -15,6 +15,30 @@ flowchart LR
 ```
 
 The validator is a hard gate. The LLM can suggest anything, but `INSERT`, `pg_*`, `SELECT *`, or a CTE name from a sloppy R5 patch never reaches the database.
+
+## Text2SQL Agent
+
+The Olist e-commerce production database **[10 tables in different normal-forms]** evaluation harness with 39 golden-set queries — hand-curated **16 easy / 13 medium / 10 hard**.
+
+```
+Easy   🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟥🟥🟥     13/16  (81.3%)
+Medium 🟩🟩🟩🟩🟩🟩🟩🟩🟩🟥🟥🟥🟥             9/13  (69.2%)
+Hard   🟩🟩🟩🟩🟥🟥🟥🟥🟥🟥                   4/10  (40.0%)
+─────────────────────────────────────────────────────
+All    🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟥🟥🟥🟥🟥🟥🟥🟥🟥🟥🟥🟥   26/39  (66.7%)
+```
+
+### Improvements per model (13 hardest cases)
+
+| Stage | gpt-4o-mini | gpt-5.4 |
+|---|---|---|
+| Start (git-clone baseline) | 0/13 (0%) | 0/13 (0%) |
+| v1–v3 prompt hardening | 3/13 (23.1%) | 5/13 (38.5%) |
+| + gold SQL fixes (v2) | 5/13 (38.5%) | 8/13 (61.5%) |
+| + strict comparator + verbose questions (v3) | 4/13 (30.8%) | 7/13 (53.8%) |
+| **Net improvement** | **+30.8 pts** | **+53.8 pts** |
+
+> Note: v3 is stricter than v2 by design — it rejects extra columns the question didn't ask for. Full write-up: [`docs/failure/goldenset_v1.md`](docs/failure/goldenset_v1.md).
 
 ## Query lifecycle with retry
 
@@ -70,16 +94,6 @@ The validator is independent of the LLM — deterministic, side-effect-free, tes
 `.gitleaks.toml` + `scripts/ci/install-hooks.sh` install a pre-commit hook. After `brew install gitleaks && ./scripts/ci/install-hooks.sh`, every `git commit` runs `gitleaks protect --staged --redact`. Real keys are blocked; placeholders in `.env.example` and the docs are allowlisted via `regexTarget = "match"`. One-off history audit: `gitleaks detect --source . --no-banner`.
 
 ## Evals
-
-### Pass rate by difficulty (v3, gpt-4o-mini, 39 cases)
-
-```
-Easy   🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟥🟥🟥     13/16  (81.3%)
-Medium 🟩🟩🟩🟩🟩🟩🟩🟩🟩🟥🟥🟥🟥             9/13  (69.2%)
-Hard   🟩🟩🟩🟩🟥🟥🟥🟥🟥🟥                   4/10  (40.0%)
-─────────────────────────────────────────────────────
-All    🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟥🟥🟥🟥🟥🟥🟥🟥🟥🟥🟥🟥   26/39  (66.7%)
-```
 
 ### v1 → v2 → v3 — what moved the needle
 
@@ -188,10 +202,6 @@ text2sql/
 ├── pyproject.toml
 └── .env.example
 ```
-
-## What I'd do differently
-
-Run the eval before adding prompt rules, not after. Track cost per fix alongside pass-rate delta — v2's +40% token cost and 0/13 apples-to-apples is the receipt for why this matters.
 
 ## License
 
