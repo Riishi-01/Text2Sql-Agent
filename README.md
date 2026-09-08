@@ -1,6 +1,6 @@
 # Olist NL2SQL Agent
 
-> A read-only LangGraph NL2SQL agent for the Olist e-commerce dataset — ask in English, get a validated SQL query and the rows back. The interesting part isn't the agent: it's the eval harness underneath it. 39 hand-curated cases, 5-dimension rubric grading, and a measured story of which prompt fixes actually moved the pass rate (53.8% → 66.7%) versus which only added cost — with the per-model improvement story on the 13 hardest cases below.
+> A read-only LangGraph NL2SQL agent for the Olist e-commerce dataset — ask in English, get a validated SQL query and the rows back. The interesting part isn't the agent: it's the eval harness underneath it. 39 hand-curated cases, 5-dimension rubric grading, and a measured story of which prompt fixes actually moved the pass rate — **gpt-5.4 reaches 33/39 (84.6%)**, with the per-model improvement story on the 13 hardest cases below.
 
 ## Agentic Workflow diagram
 
@@ -21,12 +21,14 @@ The validator is a hard gate. The LLM can suggest anything, but `INSERT`, `pg_*`
 The Olist e-commerce production database **[10 tables in different normal-forms]** evaluation harness with 39 golden-set queries — hand-curated **16 easy / 13 medium / 10 hard**.
 
 ```
-Easy   🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟥🟥🟥     13/16  (81.3%)
-Medium 🟩🟩🟩🟩🟩🟩🟩🟩🟩🟥🟥🟥🟥             9/13  (69.2%)
-Hard   🟩🟩🟩🟩🟥🟥🟥🟥🟥🟥                   4/10  (40.0%)
-─────────────────────────────────────────────────────
-All    🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟥🟥🟥🟥🟥🟥🟥🟥🟥🟥🟥🟥   26/39  (66.7%)
+Easy   🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟥        15/16  (93.8%)
+Medium 🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟥🟥                11/13  (84.6%)
+Hard   🟩🟩🟩🟩🟩🟩🟩🟥🟥🟥                     7/10  (70.0%)
+──────────────────────────────────────────────────────
+All    🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟥🟥🟥🟥🟥🟥   33/39  (84.6%)
 ```
+
+> Composition: 26 cases passed by earlier full-39 runs (13 easy / 9 medium / 4 hard) + **gpt-5.4** passes 7 of the 13 hardest golden-set cases (e03, e13, h02, h07, h09, m09, m13). The 6 remaining golden failures were re-confirmed in the latest failure-rerun after the gold-set fixes (h10 rubric, m05 NULL category) — see [`docs/failure/goldenset_v1.md`](docs/failure/goldenset_v1.md).
 
 ### Improvements per model (13 hardest cases)
 
