@@ -1,6 +1,6 @@
 # Olist NL2SQL Agent
 
-> A read-only LangGraph NL2SQL agent for the Olist e-commerce dataset — ask in English, get a validated SQL query and the rows back. The interesting part isn't the agent: it's the eval harness underneath it. 39 hand-curated cases, 5-dimension rubric grading, and a measured story of which prompt fixes actually moved the pass rate — **26/39 → 33/39 (84.6%)**.
+> A read-only LangGraph NL2SQL agent for the Olist e-commerce dataset — ask in English, get a validated SQL query and the rows back. The interesting part isn't the agent: it's the eval harness underneath it. 39 hand-curated cases, 5-dimension rubric grading, and a measured story of which prompt fixes actually moved the pass rate — **32/39 (82.05%) on gpt-5.4 single-run, +15.4pp over the gpt-4o-mini baseline (26/39 = 66.67%)**. Detailed failure analysis: [`docs/failure/gpt54_full39_v1_run.md`](docs/failure/gpt54_full39_v1_run.md).
 
 ## Agentic Workflow diagram
 
@@ -22,29 +22,34 @@ The Olist e-commerce production database **[10 tables in different normal-forms]
 
 ```
 Easy   🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟥        15/16  (93.8%)
-Medium 🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟥🟥                11/13  (84.6%)
-Hard   🟩🟩🟩🟩🟩🟩🟩🟥🟥🟥                     7/10  (70.0%)
+Medium 🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟥🟥🟥                10/13  (76.9%)
+Hard   🟩🟩🟩🟩🟩🟩🟩🟥🟥🟥                      7/10  (70.0%)
 ──────────────────────────────────────────────────────
-All    🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟥🟥🟥🟥🟥🟥   33/39  (84.6%)
+All    🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟥🟥🟥🟥🟥🟥   32/39  (82.1%)
 ```
 
-> Composition: **26/39** at the starting reference run (gpt-4o-mini) + **gpt-5.4** passes **7/13** of the hardest golden-set cases (e03, e13, h02, h07, h09, m09, m13) after the **adjusted Golden Set Evaluator** (EXTRACT/DATE_PART rubric + m05 NULL-category gold). The 6 remaining golden failures were re-confirmed in the latest failure-rerun — see [`docs/failure/goldenset_v1.md`](docs/failure/goldenset_v1.md).
+### Reference runs
 
-### Improvements per model
+| Run | Model | Pass | Pass rate | EX | Cost |
+|---|---|---|---|---|---|
+| Baseline | gpt-4o-mini | 26 / 39 | 66.67% | 69.23% | $0.034 |
+| Partial rerun (13 hardest) | gpt-5.4 | 7 / 13 | 53.85% | 61.54% | (untracked) |
+| **Current (full 39)** | **gpt-5.4** | **32 / 39** | **82.05%** | **84.62%** | $0.70 |
 
-Per-model progress on the 13 hardest baseline-failure cases
-(`docs/failure/goldenset_v1.md` for the full story).
+Per-model progress: gpt-4o-mini baseline (26/39 = 66.67%) → gpt-5.4
+on the full set (32/39 = 82.05%) = **+15.4pp pass**, **+15.4pp EX**,
+**+6 queries**. Per-difficulty on the gpt-5.4 full run:
 
-| Stage | gpt-4o-mini | gpt-5.4 |
-|---|---|---|
-| v1–v3 prompt hardening | 3/13 | 5/13 |
-| + adjusted Golden Set Evaluator (v2) | 5/13 | 8/13 |
-| + strict comparator + verbose questions (v3) | 4/13 | 7/13 |
-| **Latest (v3 + post-fix failure-rerun)** | 5/13 | **7/13** |
+- Easy (16):   15/16 = 93.75%
+- Medium (13): 10/13 = 76.92%
+- Hard (10):    7/10 = 70.00%
 
-**Overall (39-case):** starting reference run `26/39` (66.7%, gpt-4o-mini) + 7 latest improvements on the 13 hardest cases (gpt-5.4) = **33/39 (84.6%)** — net **+7 queries, +17.9 pp**.
+The 7 remaining failures (`e01`, `h03`, `h04`, `h10`, `m01`, `m03`,
+`m05`) — see [`docs/failure/gpt54_full39_v1_run.md`](docs/failure/gpt54_full39_v1_run.md).
 
-> Note: v3 is stricter than v2 by design — it rejects extra columns the question didn't ask for. Full write-up: [`docs/failure/goldenset_v1.md`](docs/failure/goldenset_v1.md).
+> Note: the comparator is strict — extras columns or missing filters
+> are real failures, not tolerated leniency. See
+> [`docs/failure/goldenset_v1.md`](docs/failure/goldenset_v1.md).
 
 ## Query lifecycle with retry
 

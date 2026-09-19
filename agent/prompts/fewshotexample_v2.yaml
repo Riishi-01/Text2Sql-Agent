@@ -1,0 +1,367 @@
+# Few-Shot Examples — v2 
+# The prompt builder compiles this file when few_shot_version == "v2".
+
+
+## Example 1: Total Revenue by Customer State
+
+**Question:** "What is the total revenue by customer state?"
+
+```sql
+SELECT
+    c.customer_state,
+    ROUND(SUM(oi.price + oi.freight_value), 2) AS revenue
+FROM orders o
+JOIN customers c ON o.customer_id = c.customer_id
+JOIN order_items oi ON o.order_id = oi.order_id
+GROUP BY c.customer_state
+ORDER BY revenue DESC
+LIMIT 27;
+```
+
+*Note: Revenue = price + freight_value. No order_status filter — the
+question asks for all orders, not just delivered ones. Only add the
+order_status filter when the question explicitly mentions "delivered",
+"shipped", "canceled", etc.*
+
+---
+
+## Example 2: Average Order Value by Product Category
+
+**Question:** "Show average order value by product category"
+
+```sql
+SELECT
+    COALESCE(pct.product_category_name_english, p.product_category_name) AS category,
+    ROUND(AVG(oi.price + oi.freight_value), 2) AS avg_order_value
+FROM order_items oi
+JOIN products p ON oi.product_id = p.product_id
+LEFT JOIN product_category_translation pct
+    ON p.product_category_name = pct.product_category_name
+GROUP BY COALESCE(pct.product_category_name_english, p.product_category_name)
+ORDER BY avg_order_value DESC
+LIMIT 20;
+```
+
+*Note: Always COALESCE to the English name. LEFT JOIN so untranslated
+products still appear.*
+
+---
+
+## Example 3: Top 5 Sellers by Total Items Sold (NOT revenue)
+
+**Question:** "Who are the top 5 sellers by total items sold?"
+
+```sql
+SELECT
+    s.seller_id,
+    COUNT(*) AS items_sold
+FROM sellers s
+JOIN order_items oi ON s.seller_id = oi.seller_id
+GROUP BY s.seller_id
+ORDER BY items_sold DESC
+LIMIT 5;
+```
+
+*Note: Include ONLY the columns the question asks for — (seller_id,
+items_sold). Do NOT add revenue, freight_value, or order_count unless
+the question requests them. "Top 5 by X" returns exactly (id, X).*
+
+---
+
+## Example 4: Orders Canceled Before Payment Approval
+
+**Question:** "How many orders were canceled before payment approval?"
+
+```sql
+SELECT COUNT(*) AS canceled_before_approval
+FROM orders
+WHERE order_status = 'canceled'
+  AND order_approved_at IS NULL;
+```
+
+*Note: "How many / count of / number of" → ONE row with COUNT(*).
+This is the ONLY aggregation that skips ORDER BY — top-N, distribution,
+and per-X aggregations all need ORDER BY.*
+
+---
+
+## Example 5: Avg Items Per Order Per State (Top 5)
+
+**Question:** "Show average basket size in items per customer state, top 5"
+
+```sql
+SELECT customer_state, ROUND(AVG(n_items), 2) AS avg_items
+FROM (
+    SELECT c.customer_state, COUNT(*) AS n_items
+    FROM orders o
+    JOIN customers c ON o.customer_id = c.customer_id
+    JOIN order_items oi ON o.order_id = oi.order_id
+    WHERE o.order_status = 'delivered'
+    GROUP BY o.order_id, c.customer_state
+) AS sub
+GROUP BY customer_state
+ORDER BY avg_items DESC
+LIMIT 5;
+```
+
+*Note: Pre-aggregate per order first, THEN average per state. Direct
+AVG(COUNT(*)) is wrong grain. Subquery aliased AS sub, NOT a CTE.*
+
+---
+
+## Example 6: Average Review Score — Latest Review Per Order
+
+**Question:** "What is the average review score, considering only the
+latest review per order?"
+
+```sql
+SELECT AVG(review_score) AS avg_review_score
+FROM (
+    SELECT DISTINCT ON (order_id)
+        order_id,
+        review_score
+    FROM order_reviews
+    ORDER BY order_id, review_creation_date DESC
+) AS latest_reviews;
+```
+
+*Note: DISTINCT ON (order_id) keeps one row per order_id — the one with
+the most recent review_creation_date. Subquery aliased AS latest_reviews,
+NOT a CTE. The validator does not recognize CTE names as valid tables.*
+
+---
+
+## Example 7: Monthly Average Order Value Trend (full dataset)
+
+**Question:** "Monthly average order value trend across the full dataset"
+
+```sql
+SELECT
+    TO_CHAR(sub.order_purchase_timestamp, 'YYYY-MM') AS ym,
+    ROUND(AVG(sub.order_total), 2) AS avg_order_value,
+    COUNT(*) AS n_orders
+FROM (
+    SELECT
+        o.order_id,
+        o.order_purchase_timestamp,
+        SUM(oi.price + oi.freight_value) AS order_total
+    FROM orders o
+    JOIN order_items oi ON o.order_id = oi.order_id
+    GROUP BY o.order_id, o.order_purchase_timestamp
+) AS sub
+GROUP BY TO_CHAR(sub.order_purchase_timestamp, 'YYYY-MM')
+ORDER BY ym;
+```
+
+*Note: TO_CHAR('YYYY-MM') gives one sortable column for month buckets.
+Do NOT split into EXTRACT(YEAR) + EXTRACT(MONTH) — two columns is the
+wrong shape. No LIMIT — "full trend" means all months. Always include
+COUNT(*) AS n_orders for auditability.*
+
+---
+
+## Example 8: Compare Avg Review Score: 1-Item vs Multi-Item Orders
+
+**Question:** "Compare average review score for single-item orders vs
+multi-item orders"
+
+```sql
+SELECT
+    CASE WHEN sub.n_items = 1 THEN 'single_item' ELSE 'multi_item' END AS basket_type,
+    ROUND(AVG(r.review_score), 3) AS avg_score,
+    COUNT(*) AS n
+FROM order_reviews r
+JOIN (
+    SELECT o.order_id, COUNT(*) AS n_items
+    FROM order_items oi
+    JOIN orders o ON oi.order_id = o.order_id
+    GROUP BY o.order_id
+) AS sub ON r.order_id = sub.order_id
+GROUP BY basket_type;
+```
+
+*Note: CASE WHEN directly in SELECT + GROUP BY on the alias. Subquery
+pre-aggregates the per-order item count so the CASE compares per-order
+grain, not per-line-item.*
+
+---
+
+## Example 9: Order Count Distribution Per Seller
+
+**Question:** "How many sellers sold exactly N distinct orders?"
+
+```sql
+SELECT n_orders, COUNT(*) AS n_sellers
+FROM (
+    SELECT seller_id, COUNT(DISTINCT order_id) AS n_orders
+    FROM order_items
+    GROUP BY seller_id
+) AS sub
+GROUP BY n_orders
+ORDER BY n_orders;
+```
+
+*Note: Distribution = return ALL rows, no LIMIT. "Distribution of X"
+= one row per distinct X value.*
+
+---
+
+## Example 10: Total Payment Value By Payment Type
+
+**Question:** "Show total payment value for each payment method, highest first"
+
+```sql
+SELECT
+    payment_type,
+    ROUND(SUM(payment_value), 2) AS total_value,
+    COUNT(*) AS n
+FROM order_payments
+GROUP BY payment_type
+ORDER BY total_value DESC;
+```
+
+*Note: SUM (not AVG) — question asks for total. Always include ORDER BY
+when the question implies order ("highest first", "top", "bottom",
+"ordered by").*
+
+---
+
+## Example 11: Top 5 Sellers By Distinct Categories Sold (≥10 items)
+
+**Question:** "Top 5 sellers by number of distinct product categories
+they sell, only sellers with at least 10 items sold"
+
+```sql
+SELECT
+    s.seller_id,
+    COUNT(DISTINCT pct.product_category_name_english) AS n_categories
+FROM sellers s
+JOIN order_items oi ON s.seller_id = oi.seller_id
+JOIN products p ON oi.product_id = p.product_id
+LEFT JOIN product_category_translation pct
+    ON p.product_category_name = pct.product_category_name
+GROUP BY s.seller_id
+HAVING COUNT(*) >= 10
+ORDER BY n_categories DESC, s.seller_id
+LIMIT 5;
+```
+
+*Note: Return ONLY (seller_id, n_categories) — do NOT add revenue or
+item_count. Secondary ORDER BY s.seller_id is the deterministic
+tiebreaker for the LIMIT 5 boundary. HAVING uses COUNT(*) on the raw
+line items (not DISTINCT).*
+
+---
+
+## Example 12: Average Review Score — Latest Review Per Customer
+
+**Question:** "What is the average review score considering only the
+most recent review per customer?"
+
+```sql
+SELECT AVG(review_score) AS avg_review_score
+FROM (
+    SELECT DISTINCT ON (o.customer_id)
+        o.customer_id,
+        r.review_score
+    FROM order_reviews r
+    JOIN orders o ON r.order_id = o.order_id
+    ORDER BY o.customer_id, r.review_creation_date DESC
+) AS latest_reviews;
+```
+
+*Note: DISTINCT ON at customer grain instead of order grain. Must join
+to orders to get the customer_id (order_reviews only has order_id).
+Column o.customer_id is qualified with the `o` alias to disambiguate
+from customers.customer_id (which is not joined here).*
+
+---
+
+## Example 13: Top 3 SP Sellers In bed_bath_table 2017 (4-hop join)
+
+**Question:** "Top 3 sellers in SP by items sold for the bed_bath_table
+category in 2017"
+
+```sql
+SELECT
+    s.seller_id,
+    COUNT(*) AS items_sold
+FROM orders o
+JOIN order_items oi ON o.order_id = oi.order_id
+JOIN sellers s ON oi.seller_id = s.seller_id
+JOIN products p ON oi.product_id = p.product_id
+JOIN customers c ON o.customer_id = c.customer_id
+LEFT JOIN product_category_translation pct
+    ON p.product_category_name = pct.product_category_name
+WHERE c.customer_state = 'SP'
+  AND pct.product_category_name_english = 'bed_bath_table'
+  AND o.order_purchase_timestamp >= '2017-01-01'
+  AND o.order_purchase_timestamp < '2018-01-01'
+GROUP BY s.seller_id
+ORDER BY items_sold DESC
+LIMIT 3;
+```
+
+*Note: 4-hop chain (orders → order_items → sellers + orders →
+order_items → products → product_category_translation). All filters
+(state, English category name, date range) live next to the joins that
+introduce their tables. Date range uses half-open interval
+[2017-01-01, 2018-01-01).*
+
+---
+
+## Example 14: Each Seller's Share Of Items In Their State (window fn)
+
+**Question:** "For each seller, what percent of items sold came from
+sellers in the same state?"
+
+```sql
+SELECT
+    seller_state,
+    seller_id,
+    items_sold,
+    ROUND(
+        100.0 * items_sold / SUM(items_sold) OVER (PARTITION BY seller_state),
+        2
+    ) AS pct_of_state_items
+FROM (
+    SELECT
+        s.seller_state,
+        s.seller_id,
+        COUNT(*) AS items_sold
+    FROM sellers s
+    JOIN order_items oi ON s.seller_id = oi.seller_id
+    GROUP BY s.seller_state, s.seller_id
+) AS sub
+ORDER BY seller_state, items_sold DESC;
+```
+
+*Note: Window function `SUM(...) OVER (PARTITION BY seller_state)`
+computes the per-state total without a self-join. Subquery pre-aggregates
+items per (state, seller) so the window partition works on clean grain.*
+
+---
+
+## Example 15: Top 5 Categories By Item Count — Anti-Over-Generation
+
+**Question:** "Top 5 product categories by total items sold"
+
+```sql
+SELECT
+    COALESCE(pct.product_category_name_english, p.product_category_name) AS category,
+    COUNT(*) AS item_count
+FROM order_items oi
+JOIN products p ON oi.product_id = p.product_id
+LEFT JOIN product_category_translation pct
+    ON p.product_category_name = pct.product_category_name
+GROUP BY COALESCE(pct.product_category_name_english, p.product_category_name)
+ORDER BY item_count DESC
+LIMIT 5;
+```
+
+*Note: ANTI-OVER-GENERATION CANONICAL SHAPE. The question asks for
+"top 5 by item count" — return EXACTLY (category, item_count). Do NOT
+add SUM(price + freight_value) as `revenue`, COUNT(DISTINCT order_id) as
+`n_orders`, or any other "useful-looking" metric unless the question
+explicitly asks. This is the canonical shape for the
+e01 / h04 / h05 / m01 failure family.*
