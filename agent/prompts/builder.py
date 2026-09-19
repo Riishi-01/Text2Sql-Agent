@@ -66,7 +66,7 @@ def assemble_system_prompt(now_value: str = None) -> str:
     # Load all prompt components
     role = load_prompt_file("role.md")
     semantic_model = load_prompt_file("semantic_model.yaml")
-    few_shot = load_prompt_file("few_shot.yaml")
+    few_shot = load_prompt_file("fewshotexample_v2.yaml")
     orientation = load_prompt_file("orientation.md")
 
     # Resolve {{NOW}} in each component

@@ -1,8 +1,16 @@
 # Failure analysis — gpt-5.4 full-39 single run (2026-09-19)
 
+> **Status: legacy / archived.** This run used the previous prompt bank
+> `few_shot.yaml`, which had several examples that mirrored golden-set
+> questions (the smoking-gun was Ex 12, identical SQL to Ex 7). The
+> current active bank is `fewshotexample_v2.yaml`; its failure
+> analysis is at [`gpt54_full39_v2_run.md`](gpt54_full39_v2_run.md).
+> This file is retained for historical comparison only.
+
 - **Date:** 2026-09-19
 - **Run ID:** `v2_1_full39_gpt5_4_20260919_150256`
 - **Model:** agent(gpt-5.4)
+- **Prompt bank:** `agent/prompts/few_shot.yaml` (legacy — no longer loaded)
 - **Cases:** 39 / 39 (full golden set)
 - **Workers:** 10 (ThreadPoolExecutor)
 - **Result:** 32 pass / 9 review / 7 fail / 0 errors / 0 false positives

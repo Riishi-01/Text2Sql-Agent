@@ -33,7 +33,6 @@ All    🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩�
 | Run | Model | Pass | Pass rate | EX | Cost |
 |---|---|---|---|---|---|
 | Baseline | gpt-4o-mini | 26 / 39 | 66.67% | 69.23% | $0.034 |
-| Partial rerun (13 hardest) | gpt-5.4 | 7 / 13 | 53.85% | 61.54% | (untracked) |
 | **Current (full 39)** | **gpt-5.4** | **32 / 39** | **82.05%** | **84.62%** | $0.70 |
 
 Per-model progress: gpt-4o-mini baseline (26/39 = 66.67%) → gpt-5.4
@@ -44,8 +43,8 @@ on the full set (32/39 = 82.05%) = **+15.4pp pass**, **+15.4pp EX**,
 - Medium (13): 10/13 = 76.92%
 - Hard (10):    7/10 = 70.00%
 
-The 7 remaining failures (`e01`, `h03`, `h04`, `h10`, `m01`, `m03`,
-`m05`) — see [`docs/failure/gpt54_full39_v1_run.md`](docs/failure/gpt54_full39_v1_run.md).
+The 7 remaining failures (`e06`, `h04`, `h06`, `h10`, `m01`, `m05`,
+`m09`) — see [`docs/failure/gpt54_full39_v2_run.md`](docs/failure/gpt54_full39_v2_run.md).
 
 > Note: the comparator is strict — extras columns or missing filters
 > are real failures, not tolerated leniency. See
